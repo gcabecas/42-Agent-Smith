@@ -1,0 +1,9 @@
+
+Pass from Flask to WSGI
+https://python.plainenglish.io/tutorial-from-flasks-dev-server-to-production-with-apache-wsgi-6e986f404091
+
+FlaskDoc
+https://flask.palletsprojects.com/en/stable/quickstart/
+
+JSON-RCP
+https://en.wikipedia.org/wiki/JSON-RPC
