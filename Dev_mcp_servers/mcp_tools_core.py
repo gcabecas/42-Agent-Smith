@@ -22,8 +22,8 @@ class McpToolsCore(BaseModel):
 
     model: str = ""
     methods: dict[str, Any]
-    response: Callable[..., None] = placeholder
-    response_error: Callable[..., None] = placeholder
+    response: Callable[..., Response | None] = placeholder
+    response_error: Callable[..., Response | None] = placeholder
 
     ids: int = 0
     queue: dict[int, str] = dict()
@@ -42,21 +42,23 @@ class McpToolsCore(BaseModel):
             raise ValueError("in_format invalid, possible : http | stdio")
 
         if self.out_format == "http":
-            def response(msg: str) -> Response:
+            def response(msg: str) -> Response | None:
                 return Response(msg)
-            def response_error(msg: str) -> Response:
+            def response_error(msg: str) -> Response | None:
                 return Response(msg)
         else:
-            def response(msg: str) -> None:
+            def response(msg: str) -> Response | None:
                 print(msg, file=self.io_output)
-            def response_error(msg: str) -> None:
+                return None
+            def response_error(msg: str) -> Response | None:
                 print(f"error occured:", msg, file=self.io_error)
+                return None
         self.response = response
         self.response_error = response_error
 
         return self
     
-    def message(self, infos: set[dict[str: Any]]) -> str:
+    def message(self, infos: dict[str, Any]) -> str:
         base = {"jsonrpc": "2.0"}
         base.update(infos)
         return json.dumps(base)
@@ -74,7 +76,7 @@ class McpToolsCore(BaseModel):
     def server_discover(self) -> Response:
         return Response("") # TODO
 
-    def tools_call(self, func: dict[str, Any]) -> Generator[str, None, str]:
+    def tools_call(self, func: dict[str, Any]) -> Generator[str, None, None]:
         self.queue_mutex.acquire()
         self.ids += 1
         tid = self.ids
@@ -94,7 +96,7 @@ class McpToolsCore(BaseModel):
                 self.queue_mutex.release()
                 yield rep
                 break
-            yield b"in progress" # TODO CREATE RESPONSE FUNC
+            yield "in progress" # TODO CREATE RESPONSE FUNC
 
 class RequestKeys(BaseModel):
     jsonrpc: Literal["2.0"]
@@ -134,10 +136,11 @@ class Params(BaseModel):
                     '   "io.modelcontextprotocol/protocolVersion": "2026-07-28"',
                     '   "io.modelcontextprotocol/clientCapabilities": {} # Argument ignored by the server'
                     '}, ... }')
+        return self
 
     @model_validator(mode="after")
-    def checkfunc(self) -> None:
-        pass
+    def checkfunc(self) -> "Params":
+        return self
 
 
 class CheckParams(BaseModel):

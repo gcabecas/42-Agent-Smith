@@ -154,7 +154,7 @@ class SWETools(McpToolsCore):
     def read_file(self, tid: int, filepath: str, start_line: int = -1, end_line: int = -1) -> None:
         time.sleep(2)
         self.queue_mutex.acquire()
-        self.queue.update({tid: b"task done"})
+        self.queue.update({tid: "task done"})
         self.queue_mutex.release()
         return
 

@@ -76,7 +76,7 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
             msg = tools.message({"error": {"code": -32700, "message": "invalid json"}})
             return tools.response_error(msg)
         try:
-            valid = CheckRequestKeys(data=data)
+            valid1 = CheckRequestKeys(data=data)
         except Exception as e:
             msg = tools.message({"error": {"code": -32600, "message": f"json keys error;{request_format}"}})
             return tools.response_error(msg)
@@ -84,7 +84,7 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
             msg = tools.message({"error": {"code": -32601, "message": "unknow method; possibles: tools/list | tools/call | server/discover   "}})
             return tools.response_error(msg)
         try:
-            valid = CheckRequestParams(data=data)
+            valid2 = CheckRequestParams(data=data)
         except Exception as e:
             print(e)
             msg = tools.message({"error": {"code": -32602, "message": f"json arguments error;{request_format}"}})
