@@ -8,7 +8,7 @@ def main() -> None:
     try:
         config = load_config("sandbox_template.json")
 
-        with open("test_sandbox/imports.txt") as f:
+        with open("test_sandbox/final_answer.txt") as f:
             code = f.read()
 
         result = execute(code, config)

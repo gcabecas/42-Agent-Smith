@@ -1,0 +1,2 @@
+final_answer(42)
+print("jamais affiché")
