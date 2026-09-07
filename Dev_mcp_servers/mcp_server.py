@@ -5,7 +5,7 @@ from typing import Any, Literal, Optional, Callable, Generator
 from flask import Flask, request, Response
 
 from mcp_swebench_core import SWETools
-from mcp_tools_core import CheckRequestKeys, CheckRequestParams
+from mcp_tools_core import CheckRequestJson, CheckRequestParamsList, CheckRequestParamsCall
 
 def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str = "0.0.0.0") -> None:
 
@@ -74,31 +74,35 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
             data = json.loads(request.data)
         except Exception as e:
             msg = tools.message({"error": {"code": -32700, "message": "invalid json"}})
-            return tools.response_error(msg)
+            return tools.response_error(msg, 400)
         try:
-            valid1 = CheckRequestKeys(data=data)
+            valid1 = CheckRequestJson(data=data)
         except Exception as e:
-            msg = tools.message({"error": {"code": -32600, "message": f"json keys error;{request_format}"}})
-            return tools.response_error(msg)
+            msg = tools.message({"error": {"code": -32600, "message": f"json error;{request_format}"}})
+            return tools.response_error(msg, 400)
         if data["method"] not in ["tools/list", "tools/call", "server/discover"]:
             msg = tools.message({"error": {"code": -32601, "message": "unknow method; possibles: tools/list | tools/call | server/discover   "}})
-            return tools.response_error(msg)
+            return tools.response_error(msg, 200)
+
         try:
-            valid2 = CheckRequestParams(data=data)
+            match data["method"]:
+                case "tools/list":
+                    CheckRequestParamsList(data=data["params"])
+                case "tools/call":
+                    CheckRequestParamsCall(data=data["params"])
+                    msg = tools.check_func_args(data["params"])
+                    if msg:
+                        raise ValueError(msg)
+                    return Response(tools.tools_call(data["params"]))
+                case "server/discover":
+                    if "params" in data.keys():
+                        raise ValueError("<params> key is useless and forbiden in server/discoover method")
         except Exception as e:
-            print(e)
-            msg = tools.message({"error": {"code": -32602, "message": f"json arguments error;{request_format}"}})
-            return tools.response_error(msg)
+            msg = tools.message({"error": {"code": -32602, "message": f"params error;\n{e}"}})
+            return tools.response_error(msg, 200)
 
-        match data["method"]:
-            case "tools/list":
-                pass
-            case "tools/call":
-                return Response(tools.tools_call(data["params"]))
-            case "server/discover":
-                pass
 
-        return Response("")
+        return Response("success")
 
 
     def main() -> None:

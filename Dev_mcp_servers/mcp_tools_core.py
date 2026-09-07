@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional, Callable, Generator
 from flask import Response
 from io import TextIOWrapper
 from threading import Thread, Lock
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, ConfigDict, Field
 
 
 def placeholder(*args, **kwargs) -> None:
@@ -44,13 +44,13 @@ class McpToolsCore(BaseModel):
         if self.out_format == "http":
             def response(msg: str) -> Response | None:
                 return Response(msg)
-            def response_error(msg: str) -> Response | None:
-                return Response(msg)
+            def response_error(msg: str, error: int) -> Response | None:
+                return Response(msg, status=error)
         else:
             def response(msg: str) -> Response | None:
                 print(msg, file=self.io_output)
                 return None
-            def response_error(msg: str) -> Response | None:
+            def response_error(msg: str, error: int) -> Response | None:
                 print(f"error occured:", msg, file=self.io_error)
                 return None
         self.response = response
@@ -63,12 +63,27 @@ class McpToolsCore(BaseModel):
         base.update(infos)
         return json.dumps(base)
 
-    def check_args(self, func: dict[str, Any]) -> dict[str, Any]:
+    def check_func_args(self, func: dict[str, Any]) -> str:
         log = ""
-        return {"test": 0}
-#        if func["name"] not in self.methods.keys()
-#            tool.response_error("unknow function used", XXX)
-        #for name, args in self.methods[func["name"]].items():
+        name = func["name"]
+        if name not in self.methods.keys():
+            return f"error; unknow fonction used: {name}"
+        if not func.get("arguments"):
+            func.update({"arguments": dict()})
+
+        for elem in self.methods[name].keys():
+            if elem.startswith("_") and elem.endswith("_optional"):
+                continue
+            if not func["arguments"].get(elem) and not self.methods[name].get("_" + elem + "_optional"):
+                log += f"error; missing argument: {elem}"
+        
+        for elem in func["arguments"].keys():
+            s_elem = str(elem)
+            if not self.methods[name].get(s_elem):
+                log += f"error; unknow argument used: {s_elem}"
+            elif not isinstance(func["arguments"][s_elem], self.methods[name][s_elem]):
+                log += f"error; wrong type for {s_elem}; used: {type(func['arguments'][s_elem])}, needed: {self.methods[name][s_elem]}"
+        return log
 
     def tools_list(self) -> Response:
         return Response(self.model)
@@ -98,52 +113,53 @@ class McpToolsCore(BaseModel):
                 break
             yield "in progress" # TODO CREATE RESPONSE FUNC
 
-class RequestKeys(BaseModel):
-    jsonrpc: Literal["2.0"]
-    id: Any
-    method: Any
-    params: Optional[Any] | None = None
 
-class CheckRequestKeys(BaseModel):
-    data: RequestKeys
-
-class RequestParams(BaseModel):
+class RequestJson(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     jsonrpc: Literal["2.0"]
     id: str | int
     method: str
-    params: Optional[dict[str, Any]] | None = None
+    params: Optional[Any] = None
 
-class CheckRequestParams(BaseModel):
-    data: RequestParams
+class CheckRequestJson(BaseModel):
+    data: RequestJson
 
-class Params(BaseModel):
-    name: str = ""
-    arguments: dict[str, Any] = dict()
-    # reference: dict[str, Any] = dict()
-    _meta: dict[str, Any]
+class RequestParamsBase(BaseModel):
+    meta: dict[str, Any] = Field(alias="_meta")
 
     @model_validator(mode="after")
     def checkmeta(self) -> "Params":
         try:
-            if self._meta["io.modelcontextprotocol/protocolVersion"] != "2026-07-28":
-                raise 
-            if not self._meta.get("io.modelcontextprotocol/clientCapabilities"):
-                raise
-        except Exception:
+            if self.meta["io.modelcontextprotocol/protocolVersion"] != "2026-07-28":
+                raise ValueError("need key : io.modelcontextprotocol/protocolVersion == 2026-07-28")
+            self.meta["io.modelcontextprotocol/clientCapabilities"]
+            if len(self.meta.keys()) > 2:
+               raise ValueError(
+                            f"unknow key detected in {self.meta};\n"
+                            "only use io.modelcontextprotocol/protocolVersion and io.modelcontextprotocol/clientCapabilities") 
+        except Exception as e:
             raise ValueError(
-                    '_meta data not correctly set, use:'
+                    f'error "{e}" _meta data not correctly set, use strictly:'
                     '"params": { "_meta": {'
                     '   "io.modelcontextprotocol/protocolVersion": "2026-07-28"',
-                    '   "io.modelcontextprotocol/clientCapabilities": {} # Argument ignored by the server'
+                    '   "io.modelcontextprotocol/clientCapabilities": {} # Mandatory Key; Argument ignored by the server'
                     '}, ... }')
         return self
 
-    @model_validator(mode="after")
-    def checkfunc(self) -> "Params":
-        return self
+class RequestParamsList(RequestParamsBase):
+    model_config = ConfigDict(extra="forbid")
 
+class RequestParamsCall(RequestParamsBase):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    arguments: dict[str, Any] = dict()
 
-class CheckParams(BaseModel):
-    data: Params
+# class RequestParamsDisco(RequestParamsBase):
+#    model_config = ConfigDict(extra="forbid")
 
+class CheckRequestParamsList(BaseModel):
+    data: RequestParamsList
+
+class CheckRequestParamsCall(BaseModel):
+    data: RequestParamsCall
 

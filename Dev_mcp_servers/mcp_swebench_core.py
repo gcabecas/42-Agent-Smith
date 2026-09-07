@@ -161,18 +161,18 @@ class SWETools(McpToolsCore):
     def edit_file(self, tid, filepath, old_str, new_str):
         pass
 
-    def list_files(self, tid, directory, pattern):
+    def list_files(self, tid, directory, pattern: str = ""):
         pass
 
 
 
-    def search_code(self, tid, pattern, file_pattern):
+    def search_code(self, tid, pattern, file_pattern: str = ""):
         pass
 
     def search_function_or_class_definition_in_code(self, tid, name):
         pass
 
-    def find_references(self, tid, name, filepath, line):
+    def find_references(self, tid, name, filepath: str = "", line: int = -1):
         pass
 
 
@@ -183,6 +183,6 @@ class SWETools(McpToolsCore):
     def get_patch(self, tid):
         pass
 
-    def run_command(self, tid, command, workdir):
+    def run_command(self, tid, command, workdir: str = ""):
         pass
 
