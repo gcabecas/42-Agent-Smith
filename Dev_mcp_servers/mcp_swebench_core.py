@@ -39,8 +39,6 @@ class SWETools(McpToolsCore):
   "id": 1,
   "result": {
     "resultType": "complete",
-    "ttlMs": 3600000,
-    "cacheScope": "public",
     "tools": [
       {
         "name": "read_file",
@@ -176,9 +174,9 @@ class SWETools(McpToolsCore):
         pass
 
 
-    def run_tests(self, tid):
 
-        Response()
+    def run_tests(self, tid):
+        pass
 
     def get_patch(self, tid):
         pass

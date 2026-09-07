@@ -3,6 +3,7 @@ import sys
 import json
 from typing import Any, Literal, Optional, Callable, Generator
 from flask import Flask, request, Response
+from pydantic import ValidationError
 
 from mcp_swebench_core import SWETools
 from mcp_tools_core import CheckRequestJson, CheckRequestParamsList, CheckRequestParamsCall
@@ -93,16 +94,44 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
                     msg = tools.check_func_args(data["params"])
                     if msg:
                         raise ValueError(msg)
-                    return Response(tools.tools_call(data["params"]))
                 case "server/discover":
                     if "params" in data.keys():
                         raise ValueError("<params> key is useless and forbiden in server/discoover method")
+        except ValidationError as exc:
+            first = exc.errors()[0]
+            
+            if first["type"] == "value_error":
+                msg = first["msg"].split("Value error,")[-1].split("[type=")[0].strip(" ('\"")
+            else:
+                msg = str(exc)
+            if "For further information" in msg.splitlines()[-1]:
+                msg = "\n".join(msg.splitlines()[:-1])
+            msg_data = tools.message({"error": {"code": -32602, "message": msg}})
+            return tools.response_error(msg_data, 200)
         except Exception as e:
             msg = tools.message({"error": {"code": -32602, "message": f"params error;\n{e}"}})
             return tools.response_error(msg, 200)
 
+        match data["method"]:
+            case "tools/list":
+                return Response(tools.model)
+            case "tools/call":
+                return Response(tools.tools_call(data["params"], data))
+            case "server/discover":
+                minimal_discover = {
+                  "jsonrpc": "2.0",
+                  "id": "discover-1",
+                  "result": {
+                    "resultType": "complete",
+                    "supportedVersions": ["2026-07-28"],
+                    "capabilities": { "tools": {} },
+                  }
+                }
+                msg = tools.message(minimal_discover)
+                return Response(msg)
 
-        return Response("success")
+        msg = tools.message({"error": {"code": -32603, "message": f"impossible error encounter"}})
+        return tools.response_error(msg, 200)
 
 
     def main() -> None:
@@ -118,15 +147,4 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
     main()
 
 
-minimal_discover = {
-  "jsonrpc": "2.0",
-  "id": "discover-1",
-  "result": {
-    "resultType": "complete",
-    "supportedVersions": ["2026-07-28"],
-    "capabilities": { "tools": {} },
-    "ttlMs": 3600000,
-    "cacheScope": "public"
-  }
-}
 

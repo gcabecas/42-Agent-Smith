@@ -91,7 +91,7 @@ class McpToolsCore(BaseModel):
     def server_discover(self) -> Response:
         return Response("") # TODO
 
-    def tools_call(self, func: dict[str, Any]) -> Generator[str, None, None]:
+    def tools_call(self, func: dict[str, Any], data: dict[str, Any]) -> Generator[str, None, None]:
         self.queue_mutex.acquire()
         self.ids += 1
         tid = self.ids
@@ -101,17 +101,32 @@ class McpToolsCore(BaseModel):
             thread = Thread(target=getattr(self, func["name"]), args=(tid,), kwargs=func["arguments"])
         else:
             thread = Thread(target=getattr(self, func["name"]), args=(tid,))
-        
+
+        if data.get("progressToken"):
+            notif_data = {
+                    "jsonrpc": "2.0",
+                    "method": "notifications/progress",
+                    "params": {
+                        "progressToken": data.get("progressToken"),
+                        "progress": 0,
+                        "message": "in progress"
+                    }
+            }
+            notif_msg = self.message(notif_data)
+        else:
+            notif_msg = ""
         thread.start()
         while 1:
             time.sleep(0.01)
+            start = time.time()
             if not thread.is_alive():
                 self.queue_mutex.acquire()
                 rep = self.queue.pop(tid)
                 self.queue_mutex.release()
                 yield rep
                 break
-            yield "in progress" # TODO CREATE RESPONSE FUNC
+            if notif_msg and start + 5 <= time.now():
+                yield notif_msg
 
 
 class RequestJson(BaseModel):
@@ -130,10 +145,15 @@ class RequestParamsBase(BaseModel):
     @model_validator(mode="after")
     def checkmeta(self) -> "Params":
         try:
+            n_valid = 2
+            if self.meta.get("progressToken"):
+                if not isinstance(self.meta["progressToken"], (int, str)):
+                    raise ValueError("wrong type for key 'progressToken' : need <int> or <string>")
+                n_valid = 3
             if self.meta["io.modelcontextprotocol/protocolVersion"] != "2026-07-28":
                 raise ValueError("need key : io.modelcontextprotocol/protocolVersion == 2026-07-28")
             self.meta["io.modelcontextprotocol/clientCapabilities"]
-            if len(self.meta.keys()) > 2:
+            if len(self.meta.keys()) > n_valid:
                raise ValueError(
                             f"unknow key detected in {self.meta};\n"
                             "only use io.modelcontextprotocol/protocolVersion and io.modelcontextprotocol/clientCapabilities") 
@@ -153,9 +173,6 @@ class RequestParamsCall(RequestParamsBase):
     model_config = ConfigDict(extra="forbid")
     name: str
     arguments: dict[str, Any] = dict()
-
-# class RequestParamsDisco(RequestParamsBase):
-#    model_config = ConfigDict(extra="forbid")
 
 class CheckRequestParamsList(BaseModel):
     data: RequestParamsList
