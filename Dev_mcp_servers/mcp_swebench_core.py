@@ -149,12 +149,24 @@ class SWETools(McpToolsCore):
 }
         """
 
-    def read_file(self, tid: int, filepath: str, start_line: int = -1, end_line: int = -1) -> None:
+    def read_file(self, tid: int, filepath: str, start_line: int = -1, end_line: float | int = float("inf")) -> None:
         time.sleep(2)
-        self.queue_mutex.acquire()
-        self.queue.update({tid: "task done"})
-        self.queue_mutex.release()
-        return
+        if start_line < 1:
+            start_line = 1
+        if start_line > end_line:
+            self.message_complete(f"error encounter: start_line can't be bigger than end_line", tid, error=True)
+            return
+        try:
+            i = 0
+            read = ""
+            with open(filepath, "r") as file:
+                i += 1
+                if end_line <= i <= start_line:
+                    read += file.readline()
+                self.message_complete(f"{read}", tid)
+        except Exception as e:
+            self.message_complete(f"error encounter: {e}", tid, error=True)
+
 
     def edit_file(self, tid, filepath, old_str, new_str):
         pass

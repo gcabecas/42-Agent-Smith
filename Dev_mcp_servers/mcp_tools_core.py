@@ -63,6 +63,23 @@ class McpToolsCore(BaseModel):
         base.update(infos)
         return json.dumps(base)
 
+    def message_complete(self, msg: str, tid: int, error: bool = False) -> None:
+
+        msg_data = {
+                "jsonrpc": "2.0",
+                "id": tid,
+                "result": {
+                    "resultType": "complete",
+                    "content": [{"type": "text", "text": msg}]
+                }
+        }
+        if error:
+            msg_data["result"].update({"isError": True})
+        msg = self.message(msg_data)
+        self.queue_mutex.acquire()
+        self.queue.update({tid: msg})
+        self.queue_mutex.release()
+
     def check_func_args(self, func: dict[str, Any]) -> str:
         log = ""
         name = func["name"]
@@ -93,8 +110,7 @@ class McpToolsCore(BaseModel):
 
     def tools_call(self, func: dict[str, Any], data: dict[str, Any]) -> Generator[str, None, None]:
         self.queue_mutex.acquire()
-        self.ids += 1
-        tid = self.ids
+        tid = data["id"]
         self.queue_mutex.release()
 
         if func.get("arguments") and func["arguments"]:
