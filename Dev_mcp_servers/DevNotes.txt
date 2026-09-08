@@ -7,3 +7,9 @@ https://flask.palletsprojects.com/en/stable/quickstart/
 
 JSON-RCP
 https://en.wikipedia.org/wiki/JSON-RPC
+
+
+When testing your SWE-bench tools in isolation, the moulinette sets
+the environment variable TESTBED_PATH to the repository root before
+starting your MCP server. Your tools must read this exact variable
+name to locate the repository

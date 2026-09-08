@@ -5,11 +5,13 @@ from typing import Any, Literal, Optional, Callable, Generator
 import sys
 import os
 import json
+from pathlib import Path
 from pydantic import BaseModel, model_validator
 from flask import Flask, request, Response
-from mcp_tools_core import McpToolsCore
-#from flask_sock import Sock
+import tree_sitter_language_pack as tslp
+import tree_sitter
 
+from mcp_tools_core import McpToolsCore
 
 # TOOLS ---------------------------------------//
 
@@ -17,6 +19,149 @@ from threading import Thread, Lock
 import time
 
 class SWETools(McpToolsCore):
+
+    def read_file(self, tid: int, filepath: str, start_line: int = -1, end_line: float | int = float("inf")) -> None:
+        time.sleep(2)
+        if start_line < 1:
+            start_line = 1
+        if start_line > end_line:
+            self.message_complete(f"error encounter: start_line can't be bigger than end_line", tid, error=True)
+            return
+        try:
+            i = 0
+            read = ""
+            with open(filepath, "r") as file:
+                line = file.readline()
+                while line:
+                    i += 1
+                    if end_line <= i <= start_line:
+                        read += f"{str(i)}: {line}"
+                    line = file.readline()
+
+                self.message_complete(read, tid)
+        except Exception as e:
+            self.message_complete(f"error encounter: {e}", tid, error=True)
+
+
+    def edit_file(self, tid: int, filepath: str, old_str: str, new_str: str) -> None:
+        try:
+            read = ""
+            with open(filepath, "r") as file:
+                line = file.readline()
+                while line:
+                    read += f"{str(i)}: {line}"
+                    line = file.readline()
+            if old_str in read:
+                read.replace(old_str, new_str)
+            else:
+                self.message_complete(f"error encounter: old_str not found in the file", tid, error=True)
+                return
+            with open(filepath, "w") as file:
+                file.write(read)
+            self.message_complete("file writed", tid)
+        except Exception as e:
+            self.message_complete(f"error encounter: {e}", tid, error=True)
+
+
+    def list_files(self, tid: int, directory: str, pattern: str = "") -> None:
+        read = ""
+        for elem in os.listdir(directory):
+            if pattern:
+                if pattern in elem:
+                    read += elem
+            else:
+                read += elem
+
+        self.message_complete(read, tid)
+
+
+    def search_code(self, tid: int, pattern: str, file_pattern: str = "") -> None:
+        read = ""
+        files = [f for f in Path(".").rglob("*") if f.is_file()]
+        for true_file in files:
+            file = str(true_file)
+            if file_pattern and file_pattern not in file:
+                continue
+            try:
+                f_read = ""
+                with open(file, "r") as f_open:
+                    line = f_open.readline()
+                    while line:
+                        f_read += line
+                        line = f_open.readline()
+                pos = f_read.find(pattern)
+                if pos != -1:
+                    n_line = read[:pos].count("\n")
+                    lines = read.split("\n")
+                    read += f"{true_file.resolve()}:{n_line + 1} {lines[n_line]}\n"
+            except Exception as e:
+                read += f"error in file {true_file.resolve()} : {e}\n"
+        self.message_complete(read, tid) 
+
+
+    def search_function_or_class_definition_in_code(self, tid: int, name: str) -> None:
+        read = ""
+        files = [f for f in Path(".").rglob("*") if f.is_file()]
+        for true_file in files:
+            file = str(true_file)
+            try:
+                f_read = ""
+                lang_key = tslp.detect_language(file)
+                if lang_key is None or file.startswith("."):
+                   # read += f"'{file}' cannot detect language\n"
+                    continue
+
+                with open(file, "r") as f_open:
+                    line = f_open.readline()
+                    while line:
+                        f_read += line
+                        line = f_open.readline()
+
+                parser = tslp.get_parser(lang_key)
+                if parser is None:
+                    continue
+                language = tslp.get_language(lang_key)
+                tree = parser.parse(f_read.encode("utf-8"))
+        
+                # Query
+                query_string = tslp.get_tags_query(lang_key)
+                if query_string is None:
+                    continue
+                # Usable objet from query
+                query = tree_sitter.Query(language, query_string)
+                if query is None:
+                    continue
+                # cursor to use query on tree
+                cursor = tree_sitter.QueryCursor(query)
+                # usage
+                matches = cursor.matches(tree.root_node)
+                
+                lines = f_read.split("\n")
+                for _, captures in matches:
+                    if "definition.function" in captures or \
+                            "definition.class" in captures:
+                        node = captures["name"][0]
+                        func_name = node.text.decode()
+                        if name == func_name:
+                            n_ligne = node.start_point[0]
+                            read += f"{true_file.resolve()}:{n_ligne + 1} {lines[n_ligne]}\n"
+
+            except Exception as e:
+                read += f"error in file {true_file.resolve()} : {e}\n"
+        self.message_complete(read, tid) 
+
+    def find_references(self, tid, name, filepath: str = "", line: int = -1):
+        pass
+
+
+    def run_tests(self, tid):
+        pass
+
+    def get_patch(self, tid):
+        pass
+
+    def run_command(self, tid, command, workdir: str = ""):
+        pass
 
     def __init__(self, *args, **kwargs) -> None:
         methods = {
@@ -148,51 +293,3 @@ class SWETools(McpToolsCore):
   }
 }
         """
-
-    def read_file(self, tid: int, filepath: str, start_line: int = -1, end_line: float | int = float("inf")) -> None:
-        time.sleep(2)
-        if start_line < 1:
-            start_line = 1
-        if start_line > end_line:
-            self.message_complete(f"error encounter: start_line can't be bigger than end_line", tid, error=True)
-            return
-        try:
-            i = 0
-            read = ""
-            with open(filepath, "r") as file:
-                i += 1
-                if end_line <= i <= start_line:
-                    read += file.readline()
-                self.message_complete(f"{read}", tid)
-        except Exception as e:
-            self.message_complete(f"error encounter: {e}", tid, error=True)
-
-
-    def edit_file(self, tid, filepath, old_str, new_str):
-        pass
-
-    def list_files(self, tid, directory, pattern: str = ""):
-        pass
-
-
-
-    def search_code(self, tid, pattern, file_pattern: str = ""):
-        pass
-
-    def search_function_or_class_definition_in_code(self, tid, name):
-        pass
-
-    def find_references(self, tid, name, filepath: str = "", line: int = -1):
-        pass
-
-
-
-    def run_tests(self, tid):
-        pass
-
-    def get_patch(self, tid):
-        pass
-
-    def run_command(self, tid, command, workdir: str = ""):
-        pass
-

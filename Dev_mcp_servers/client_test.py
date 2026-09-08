@@ -114,6 +114,11 @@ add("VALEUR", "start_line mauvais type (str au lieu d'int)",
     call_body(name="read_file", arguments={"filepath": ".", "start_line": "cinq"}))
 
 
+# === 4. Tests tools ==============
+
+add("VALEUR", "test search_function_or_class_definition_in_code",
+    call_body(name="search_function_or_class_definition_in_code", arguments={"name": "message"}))
+
 # ---------------------------------------------------------------------------
 # Exécution
 # ---------------------------------------------------------------------------
@@ -133,9 +138,18 @@ def run_tests():
         print(f"REQUEST BODY:\n{body_str}")
 
         try:
-            r = httpx.post(URL, data=body_str, timeout=5)
+            r = httpx.post(URL, data=body_str, timeout=20)
             print(f"\nSTATUS: {r.status_code}")
-            print(f"RESPONSE:\n{r.text}")
+            print(f"RESPONSE:")
+            try:
+                data = r.json()
+                print(json.dumps(data, indent=2, ensure_ascii=False))
+                try:
+                    print(data["result"]["content"][0]["text"])
+                except:
+                    pass
+            except Exception:
+                print(r.text)
         except httpx.RequestError as e:
             print(f"\n[ERREUR RESEAU] {e}")
 
