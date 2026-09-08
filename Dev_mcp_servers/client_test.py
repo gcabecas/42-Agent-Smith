@@ -22,9 +22,12 @@ def list_body(meta=META_OK, extra_top=None):
 
 def call_body(name="read_file", arguments=None, meta=META_OK, extra_top=None):
     if arguments is None:
-        arguments = {"filepath": "."}
-    body = {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-            "params": {"name": name, "arguments": arguments, "_meta": meta}}
+   #     arguments = {"filepath": "."}
+        body = {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                "params": {"name": name, "_meta": meta}}
+    else:
+        body = {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                "params": {"name": name, "arguments": arguments, "_meta": meta}}
     if extra_top:
         body["params"].update(extra_top)
     return body
@@ -116,8 +119,17 @@ add("VALEUR", "start_line mauvais type (str au lieu d'int)",
 
 # === 4. Tests tools ==============
 
+add("VALEUR", "test read_file",
+    call_body(name="read_file", arguments={"filepath": "DevNotes.txt", "start_line": 0, "end_line": 5}))
+
+add("VALEUR", "test list_files",
+    call_body(name="list_files", arguments={"directory": "."}))
+
 add("VALEUR", "test search_function_or_class_definition_in_code",
     call_body(name="search_function_or_class_definition_in_code", arguments={"name": "message"}))
+
+add("VALEUR", "test run_tests",
+    call_body(name="run_tests"))
 
 # ---------------------------------------------------------------------------
 # Exécution

@@ -21,6 +21,8 @@ import time
 class SWETools(McpToolsCore):
 
     def read_file(self, tid: int, filepath: str, start_line: int = -1, end_line: float | int = float("inf")) -> None:
+        self.operation_mutex.acquire()
+
         time.sleep(2)
         if start_line < 1:
             start_line = 1
@@ -34,7 +36,7 @@ class SWETools(McpToolsCore):
                 line = file.readline()
                 while line:
                     i += 1
-                    if end_line <= i <= start_line:
+                    if end_line >= i >= start_line:
                         read += f"{str(i)}: {line}"
                     line = file.readline()
 
@@ -44,12 +46,14 @@ class SWETools(McpToolsCore):
 
 
     def edit_file(self, tid: int, filepath: str, old_str: str, new_str: str) -> None:
+        self.operation_mutex.acquire()
+
         try:
             read = ""
             with open(filepath, "r") as file:
                 line = file.readline()
                 while line:
-                    read += f"{str(i)}: {line}"
+                    read += line
                     line = file.readline()
             if old_str in read:
                 read.replace(old_str, new_str)
@@ -58,24 +62,28 @@ class SWETools(McpToolsCore):
                 return
             with open(filepath, "w") as file:
                 file.write(read)
-            self.message_complete("file writed", tid)
         except Exception as e:
             self.message_complete(f"error encounter: {e}", tid, error=True)
+        self.message_complete("file writed", tid)
 
 
     def list_files(self, tid: int, directory: str, pattern: str = "") -> None:
+        self.operation_mutex.acquire()
+
         read = ""
         for elem in os.listdir(directory):
             if pattern:
                 if pattern in elem:
-                    read += elem
+                    read += f"{elem}\n"
             else:
-                read += elem
+                read += f"{elem}\n"
 
         self.message_complete(read, tid)
 
 
     def search_code(self, tid: int, pattern: str, file_pattern: str = "") -> None:
+        self.operation_mutex.acquire()
+
         read = ""
         files = [f for f in Path(".").rglob("*") if f.is_file()]
         for true_file in files:
@@ -100,6 +108,8 @@ class SWETools(McpToolsCore):
 
 
     def search_function_or_class_definition_in_code(self, tid: int, name: str) -> None:
+        self.operation_mutex.acquire()
+
         read = ""
         files = [f for f in Path(".").rglob("*") if f.is_file()]
         for true_file in files:
@@ -151,17 +161,23 @@ class SWETools(McpToolsCore):
         self.message_complete(read, tid) 
 
     def find_references(self, tid, name, filepath: str = "", line: int = -1):
-        pass
-
+        self.operation_mutex.acquire()
+        self.message_complete("", tid) 
 
     def run_tests(self, tid):
-        pass
+        self.operation_mutex.acquire()
+
+        time.sleep(10)
+        self.message_complete("success", tid) 
 
     def get_patch(self, tid):
-        pass
+        self.operation_mutex.acquire()
+        self.message_complete("", tid) 
 
     def run_command(self, tid, command, workdir: str = ""):
-        pass
+        self.operation_mutex.acquire()
+        self.message_complete("", tid) 
+
 
     def __init__(self, *args, **kwargs) -> None:
         methods = {

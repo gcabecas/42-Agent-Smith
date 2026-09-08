@@ -140,7 +140,7 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
                 while 1:
                     post_exchange()
             else:
-                app.run(host=host, port=port)
+                app.run(host=host, port=port, threaded=True)
         except Exception as e:
             print(f"server crashed with error : {e}", file=sys.stderr)
 

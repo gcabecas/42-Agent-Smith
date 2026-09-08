@@ -28,6 +28,7 @@ class McpToolsCore(BaseModel):
     ids: int = 0
     queue: dict[int, str] = dict()
     queue_mutex: Any = Lock()
+    operation_mutex: Any = Lock()
 
     @model_validator(mode="after")
     def checks_after(self) -> "McpToolsCore":
@@ -65,7 +66,7 @@ class McpToolsCore(BaseModel):
 
     def message_complete(self, msg: str, tid: int, error: bool = False) -> None:
 
-        msg_data = {
+        msg_data: dict[str, Any] = {
                 "jsonrpc": "2.0",
                 "id": tid,
                 "result": {
@@ -74,11 +75,12 @@ class McpToolsCore(BaseModel):
                 }
         }
         if error:
-            msg_data["result"].update({"isError": True})
+            msg_data["result"]["isError"] = True
         msg = self.message(msg_data)
         self.queue_mutex.acquire()
         self.queue.update({tid: msg})
         self.queue_mutex.release()
+        self.operation_mutex.release()
 
     def check_func_args(self, func: dict[str, Any]) -> str:
         log = ""
@@ -141,7 +143,7 @@ class McpToolsCore(BaseModel):
                 self.queue_mutex.release()
                 yield rep
                 break
-            if notif_msg and start + 5 <= time.now():
+            if notif_msg and start + 5 <= time.time():
                 yield notif_msg
 
 
@@ -159,7 +161,7 @@ class RequestParamsBase(BaseModel):
     meta: dict[str, Any] = Field(alias="_meta")
 
     @model_validator(mode="after")
-    def checkmeta(self) -> "Params":
+    def checkmeta(self) -> "RequestParamsBase":
         try:
             n_valid = 2
             if self.meta.get("progressToken"):
