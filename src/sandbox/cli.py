@@ -8,7 +8,8 @@ from src.sandbox.execute import Sandbox
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="sandbox")
-    parser.add_argument("config", nargs="?", type=load_config, default=SandboxConfig())
+    parser.add_argument("config", nargs="?", type=load_config,
+                        default=SandboxConfig())
     parser.add_argument("--mcp-stdio")
     parser.add_argument("--mcp-server")
     return parser.parse_args()

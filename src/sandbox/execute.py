@@ -15,7 +15,8 @@ from src.sandbox.security.imports import restricted_import
 from src.sandbox.security.network import block_network
 
 
-def _run_one(code: str, namespace: dict, output_path: str) -> tuple[str, str | None]:
+def _run_one(code: str, namespace: dict,
+             output_path: str) -> tuple[str, str | None]:
     with (
         open(output_path, "w", buffering=1) as output_file,
         redirect_stdout(output_file),
@@ -42,8 +43,10 @@ def _loop(
     block_network()
 
     exec_builtins = dict(SAFE_BUILTINS)
-    exec_builtins["__import__"] = partial(restricted_import, config.authorized_imports)
-    exec_builtins["open"] = partial(restricted_open, config.allowed_directories)
+    exec_builtins["__import__"] = partial(
+        restricted_import, config.authorized_imports)
+    exec_builtins["open"] = partial(
+        restricted_open, config.allowed_directories)
     exec_builtins["final_answer"] = final_answer
 
     namespace = {"__builtins__": exec_builtins, "__name__": "__sandbox__"}
@@ -65,7 +68,8 @@ class Sandbox:
         self.in_queue = multiprocessing.Queue()
         self.out_queue = multiprocessing.Queue()
 
-        output_fd, self.output_path = tempfile.mkstemp(prefix="sandbox_output_")
+        output_fd, self.output_path = tempfile.mkstemp(
+            prefix="sandbox_output_")
         os.close(output_fd)
 
         self.process = multiprocessing.Process(
@@ -79,15 +83,18 @@ class Sandbox:
         self.in_queue.put(code)
 
         reader, sentinel = self.out_queue._reader, self.process.sentinel
-        ready = multiprocessing.connection.wait([reader, sentinel], timeout=timeout)
+        ready = multiprocessing.connection.wait(
+            [reader, sentinel], timeout=timeout)
 
         if reader in ready:
             status, value = self.out_queue.get()
         elif sentinel in ready:
-            status, value = "interrupted", "sandbox process terminated (KeyboardInterrupt or SystemExit)"
+            status, value = "interrupted",
+            "sandbox process terminated (KeyboardInterrupt or SystemExit)"
         else:
             self._kill()
-            status, value = "timeout", f"execution timed out after {timeout}s, output may be partial"
+            status, value = "timeout",
+            f"execution timed out after {timeout}s, output may be partial"
 
         with open(self.output_path) as output_file:
             return Result(status, value, output_file.read())

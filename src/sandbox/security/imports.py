@@ -3,7 +3,8 @@ import builtins
 
 def _is_authorized(name: str, authorized_imports: list[str]) -> bool:
     for entry in authorized_imports:
-        if entry == name or (entry.endswith(".*") and name.startswith(entry[:-1])):
+        if entry == name or (entry.endswith(".*") and
+                             name.startswith(entry[:-1])):
             return True
     return False
 
