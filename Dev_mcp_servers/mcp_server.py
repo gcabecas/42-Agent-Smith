@@ -88,8 +88,12 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
         try:
             match data["method"]:
                 case "tools/list":
+                    if data.get("params") is None:
+                        raise ValueError("key 'params' not defined")
                     CheckRequestParamsList(data=data["params"])
                 case "tools/call":
+                    if data.get("params") is None:
+                        raise ValueError("key 'params' not defined")
                     CheckRequestParamsCall(data=data["params"])
                     msg = tools.check_func_args(data["params"])
                     if msg:
@@ -97,17 +101,6 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
                 case "server/discover":
                     if "params" in data.keys():
                         raise ValueError("<params> key is useless and forbiden in server/discoover method")
-        except ValidationError as exc:
-            first = exc.errors()[0]
-            
-            if first["type"] == "value_error":
-                msg = first["msg"].split("Value error,")[-1].split("[type=")[0].strip(" ('\"")
-            else:
-                msg = str(exc)
-            if "For further information" in msg.splitlines()[-1]:
-                msg = "\n".join(msg.splitlines()[:-1])
-            msg_data = tools.message({"error": {"code": -32602, "message": msg}})
-            return tools.response_error(msg_data, 200)
         except Exception as e:
             msg = tools.message({"error": {"code": -32602, "message": f"params error;\n{e}"}})
             return tools.response_error(msg, 200)

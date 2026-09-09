@@ -80,7 +80,6 @@ class McpToolsCore(BaseModel):
         self.queue_mutex.acquire()
         self.queue.update({tid: msg})
         self.queue_mutex.release()
-        self.operation_mutex.release()
 
     def check_func_args(self, func: dict[str, Any]) -> str:
         log = ""
@@ -102,6 +101,8 @@ class McpToolsCore(BaseModel):
                 log += f"error; unknow argument used: {s_elem}"
             elif not isinstance(func["arguments"][s_elem], self.methods[name][s_elem]):
                 log += f"error; wrong type for {s_elem}; used: {type(func['arguments'][s_elem])}, needed: {self.methods[name][s_elem]}"
+        if log:
+            log = "[key 'arguments' error. missing or wrong value]\n" + log
         return log
 
     def tools_list(self) -> Response:
