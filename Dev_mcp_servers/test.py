@@ -17,7 +17,7 @@ class CloakStyle:
         pass
 
 
-def goodbye():
+def muffin():
     pass
 
 

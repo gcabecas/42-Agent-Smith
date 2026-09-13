@@ -53,15 +53,19 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
     Exemples :
 
     tools/list :
-    {"jsonrpc":"2.0","id":1,"method":"tools/list",
-     "params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
-     "io.modelcontextprotocol/clientCapabilities":{}}}}
+    {
+        "jsonrpc":"2.0","id":1,"method":"tools/list",
+        "params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities":{}}}
+     }
 
     tools/call :
-    {"jsonrpc":"2.0","id":2,"method":"tools/call",
-     "params":{"name":"nom_du_tool","arguments":{"arg1":"valeur"},
-     "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
-     "io.modelcontextprotocol/clientCapabilities":{}}}}
+    {
+        "jsonrpc":"2.0","id":2,"method":"tools/call",
+        "params":{"name":"nom_du_tool","arguments":{"arg1":"valeur"},
+        "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities":{}}}
+    }
 
     server/discover :
     {"jsonrpc":"2.0","id":3,"method":"server/discover","params":{}}"""
@@ -79,7 +83,7 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
         try:
             valid1 = CheckRequestJson(data=data)
         except Exception as e:
-            msg = tools.message({"error": {"code": -32600, "message": f"json error;{request_format}"}})
+            msg = tools.message({"error": {"code": -32600, "message": f"json error {e}; look at the documentation the permited format"}})
             return tools.response_error(msg, 400)
         if data["method"] not in ["tools/list", "tools/call", "server/discover"]:
             msg = tools.message({"error": {"code": -32601, "message": "unknow method; possibles: tools/list | tools/call | server/discover   "}})

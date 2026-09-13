@@ -62,12 +62,12 @@ class SWETools(McpToolsCore):
                     read += line
                     line = file.readline()
             if old_str in read:
-                read.replace(old_str, new_str)
+                new_read = read.replace(old_str, new_str)
             else:
                 self.message_complete(f"error encounter: old_str not found in the file", tid, error=True)
                 return
             with open(filepath, "w") as file:
-                file.write(read)
+                file.write(new_read)
         except Exception as e:
             self.message_complete(f"error encounter: {e}", tid, error=True)
             return
@@ -81,12 +81,26 @@ class SWETools(McpToolsCore):
         
         read = ""
         try:
-            for elem in os.listdir(directory):
+            elems = sorted(os.listdir(directory))
+            for elem in elems:
                 if pattern:
                     if pattern in elem:
-                        read += f"{elem}\n"
+                        path = f"{directory}/{elem}"
+                        if os.path.isdir(path):
+                            read += f"{path} <dir>\n"
+                        elif os.path.islink(path):
+                            read += f"{path} <link>\n"
+                        else:
+                            read += f"{path} <file>\n"
                 else:
-                    read += f"{elem}\n"
+                    path = f"{directory}/{elem}"
+                    if os.path.isdir(path):
+                        read += f"{path} <dir>\n"
+                    elif os.path.islink(path):
+                        read += f"{path} <link>\n"
+                    else:
+                        read += f"{path} <file>\n"
+
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True) 
             return
@@ -100,13 +114,14 @@ class SWETools(McpToolsCore):
         
         read = ""
         try:
-            files = [f for f in Path(".").rglob("*") if f.is_file()]
+            files = sorted([f for f in Path(".").rglob("*") if f.is_file()])
             for true_file in files:
                 file = str(true_file)
                 if file_pattern and file_pattern not in file:
                     continue
                 try:
                     f_read = ""
+                    line = ""
                     with open(file, "r") as f_open:
                         line = f_open.readline()
                         while line:
@@ -114,11 +129,17 @@ class SWETools(McpToolsCore):
                             line = f_open.readline()
                     pos = f_read.find(pattern)
                     if pos != -1:
-                        n_line = read[:pos].count("\n")
-                        lines = read.split("\n")
-                        read += f"{true_file.resolve()}:{n_line + 1} {lines[n_line]}\n"
+                        patterns = pattern.split("\n")
+
+                        n_line = f_read[:pos].count("\n")
+                        lines = f_read.split("\n")
+                        for elem in patterns:
+                            read += f"{true_file.absolute()}:{n_line + 1} {lines[n_line]}\n"
+                            n_line += 1
+
                 except Exception as e:
-                    read += f"error in file {true_file.resolve()} : {e}\n"
+                    # read += f"error in file {true_file.absolute()} : {e}\n"
+                    pass
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True) 
             return
@@ -127,7 +148,7 @@ class SWETools(McpToolsCore):
         self.message_complete(read, tid) 
 
 
-    def search_codes_data(self, file: str) -> list[Any] | None:
+    def search_codes_data(self, file: str) -> tuple[str, list[Any]] | None:
 
         f_read = ""
         lang_key = tslp.detect_language(file)
@@ -159,18 +180,18 @@ class SWETools(McpToolsCore):
         cursor = tree_sitter.QueryCursor(query)
         # usage
         matches = cursor.matches(tree.root_node)
-        return list(matches)
+        return (f_read, list(matches))
 
     def search_function_or_class_definition_in_code(self, tid: int, name: str) -> None:
         self.operation_mutex.acquire()
 
         read = ""
         try:
-            files = [f for f in Path(".").rglob("*") if f.is_file()]
+            files = sorted([f for f in Path(".").rglob("*") if f.is_file()])
             for true_file in files:
                 file = str(true_file)
                 try:
-                    matches = search_codes_data(file)
+                    f_read, matches = self.search_codes_data(file)
                     if matches is None:
                         continue
 
@@ -182,10 +203,12 @@ class SWETools(McpToolsCore):
                             func_name = node.text.decode()
                             if name == func_name:
                                 n_ligne = node.start_point[0]
-                                read += f"{true_file.resolve()}:{n_ligne + 1} {lines[n_ligne]}\n"
+                                read += f"{true_file.absolute()}:{n_ligne + 1} {lines[n_ligne]}\n"
 
                 except Exception as e:
-                    read += f"error in file {true_file.resolve()} : {e}\n"
+                    # read += f"error in file {true_file.absolute()} : {e}\n"
+                    print(e)
+                    pass
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True) 
             return
@@ -201,8 +224,8 @@ class SWETools(McpToolsCore):
             if not filepath or not filepath.endswith(".py"):
                 all_matches = []
                 used_files = []
-                pyfiles = [f for f in Path(".").rglob("*.py") if f.is_file()]
-                files = [f for f in Path(".").rglob("*") if f.is_file() and not str(f).endswith(".py")]
+                pyfiles = sorted([f for f in Path(".").rglob("*.py") if f.is_file()])
+                files = sorted([f for f in Path(".").rglob("*") if f.is_file() and not str(f).endswith(".py")])
                 for elem in [pyfiles, files]:
                     for true_file in elem:
                         file = str(true_file)
@@ -258,7 +281,7 @@ class SWETools(McpToolsCore):
                             func_name = node.text.decode()
                             if name == func_name:
                                 n_ligne = node.start_point[0]
-                                read += f"{true_file.resolve()}:{n_ligne + 1} {lines[n_ligne]}\n"
+                                read += f"{true_file.absolute()}:{n_ligne + 1} {lines[n_ligne]}\n"
 
 
 
