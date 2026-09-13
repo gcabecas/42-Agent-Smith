@@ -191,9 +191,10 @@ class SWETools(McpToolsCore):
             for true_file in files:
                 file = str(true_file)
                 try:
-                    f_read, matches = self.search_codes_data(file)
-                    if matches is None:
+                    tmp = self.search_codes_data(file)
+                    if tmp is None:
                         continue
+                    f_read, matches = tmp
 
                     lines = f_read.split("\n")
                     for _, captures in matches:
@@ -207,7 +208,6 @@ class SWETools(McpToolsCore):
 
                 except Exception as e:
                     # read += f"error in file {true_file.absolute()} : {e}\n"
-                    print(e)
                     pass
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True) 
@@ -218,33 +218,106 @@ class SWETools(McpToolsCore):
 
     def find_references(self, tid, name, filepath: str = "", line: int = -1):
         self.operation_mutex.acquire()
+        """
+        all:
+            py:
+                precise
+            oth:
+                large
+        no file_path:
+            error line arg need a filepath
+        no file_path  no line
+            large
+        no line
+            py:
+                one ref:
+                    precise
+                multiple ref:
+                    multiple-precise
+            oth:
+                large
+        """
 
         read = ""
         try:
-            if not filepath or not filepath.endswith(".py"):
+            if line >= 0 and not filepath:
+                raise ValueError("line argument need a filepath setted")
+
+            # 1 get according files data python/other
+            if not filepath.endswith(".py"):
+                if filepath:
+                    try:
+                        with open(filepath, "r") as f_open:
+                            f_read = ""
+                            content = f_open.readline()
+                            j = 1
+                            while content:
+                                if line > 0 and j == line and name not in content:
+                                    raise ValueError("name not found in file at the given line")
+                                f_read += content
+                                content = f_open.readline()
+                                j += 1
+                            if name not in f_read:
+                                raise ValueError("name not found in file")
+                    except Exception:
+                        raise
+
                 all_matches = []
                 used_files = []
-                pyfiles = sorted([f for f in Path(".").rglob("*.py") if f.is_file()])
-                files = sorted([f for f in Path(".").rglob("*") if f.is_file() and not str(f).endswith(".py")])
-                for elem in [pyfiles, files]:
-                    for true_file in elem:
-                        file = str(true_file)
-                        try:
-                            matches = search_codes_data(file)
-                            if matches is None:
-                                continue
-                            all_matches.append(matches)
-                            used_files.append(file)
-                        except Exception:
-                            pass
+                files = sorted([f for f in Path(".").rglob("*") if f.is_file()])
+                for true_file in files:
+                    file = str(true_file)
+                    try:
+                        tmp = self.search_codes_data(file)
+                        if tmp is None:
+                            continue
+                        _, matches = tmp
+                        all_matches.append(matches)
+                        used_files.append(true_file.absolute())
+                    except Exception:
+                        pass
+
+                # 2 retrieve data
+                i = 0
+                count = 0
+                for matches in all_matches:
+                    for _, captures in matches:
+                        if not("definition.function" in captures or \
+                                "definition.class" in captures):
+                            node = captures["name"][0]
+                            func_name = node.text.decode()
+                            if name == func_name:
+                                count += 1
+                                n_ligne = node.start_point[0]
+                                content = ""
+                                try:
+                                    with open(used_files[i], "r") as f_open:
+                                        j = 0
+                                        while j < n_ligne + 1:
+                                            content = f_open.readline()
+                                            j += 1
+                                    read += f"{used_files[i]}:{n_ligne + 1} {content}\n"
+                                except Exception:
+                                    pass
+                    i += 1
+                if count == 0:
+                    raise ValueError("no definition found")
             else:
-                matches = search_codes_data(filepath)
-                if matches is None:
-                    raise ValueError("can't load tree-siter data of a .py")
-            
-            i = 0
-            pos = -1
-            for matches in all_matches:
+                # 2 retrieve data
+                try:
+                    tmp = self.search_codes_data(filepath)
+                    if tmp is None:
+                        raise ValueError(f"can't load tree-siter data of {filepath}")
+                    _, matches = tmp
+                except Exception as e:
+                    raise
+
+
+                # WORKIN -------------------------------------------------------
+                # 2.5 find the position of the original (rows not in args, or not setted args)
+
+                pos = -1
+                refs = []
                 for _, captures in matches:
                     if "definition.function" in captures or \
                             "definition.class" in captures:
@@ -252,36 +325,34 @@ class SWETools(McpToolsCore):
                         obj_name = node.text.decode()
                         if name == obj_name:
                             obj_line = node.start_point[0] + 1
-                            if line == -1 or line == obj_line:
-                                line = obj_line
+                            if line < 0 or line == obj_line:
                                 pos =  node.start_point[1]
-                                break
-                i += 1
-            if pos == -1:
-                raise ValueError("name not found in file(s)")
+                                refs.append((obj_line, pos))
+                if not refs:
+                    if line > 0:
+                        raise ValueError("name not found in file at the given line")
+                    else:
+                        raise ValueError(f"name not found in file")
 
-            if filepath.endswith(".py") or used_files[i].endswith(".py"):
-
+                # 3 trieve data
                 project = jedi.Project(".")
                 script = jedi.Script(path=filepath, project=project)
-                definitions = script.goto(line, pos)
-                references = definitions[0].usages()
-                for ref in references:
-                    read += f"{ref.module_path}:{ref.line} PLACEHERELINECONTENT"
-            else:
-                i = 0
-                for matches in all_matches:
-                    if used_files[i].endswith(".py"):
-                        i += 1
-                        continue
-                    for _, captures in matches:
-                        if not("definition.function" in captures or \
-                                "definition.class" in captures):
-                            node = captures["name"][0]
-                            func_name = node.text.decode()
-                            if name == func_name:
-                                n_ligne = node.start_point[0]
-                                read += f"{true_file.absolute()}:{n_ligne + 1} {lines[n_ligne]}\n"
+                for the_line, col in refs:
+                    references = script.get_references(the_line, col)
+                    for ref in references:
+                        if ref.is_definition():
+                            continue
+                        content = ""
+                        try:
+                            with open(ref.module_path, "r") as f_open:
+                                j = 0
+                                while j < the_line:
+                                    content = f_open.readline()
+                                    j += 1
+                            read += f"{ref.module_path}:{ref.line} {content}\n"
+                        except Exception as e:
+                            read += f"DEBUG {e}\n" # TODO
+                            pass
 
 
 
@@ -290,6 +361,8 @@ class SWETools(McpToolsCore):
             return
         finally:
             self.operation_mutex.release()
+        if not read:
+            read = "no reference(s) found"
         self.message_complete(read, tid) 
 
     def run_tests(self, tid):
