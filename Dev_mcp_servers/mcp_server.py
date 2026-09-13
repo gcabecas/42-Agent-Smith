@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from mcp_swebench_core import SWETools
 from mcp_tools_core import CheckRequestJson, CheckRequestParamsList, CheckRequestParamsCall
 
-def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str = "0.0.0.0") -> None:
+def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str = "0.0.0.0") -> Flask:
 
     if mode == "stdio":
         out_format = "stdio"
@@ -130,18 +130,14 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
         msg = tools.message({"error": {"code": -32603, "message": f"impossible error encounter"}})
         return tools.response_error(msg, 200)
 
-
-    def main() -> None:
-        try:
-            if mode == "stdio":
+    if mode == "stdio":
+        def main() -> None:
+            try:
                 while 1:
                     post_exchange()
-            else:
-                app.run(host=host, port=port, threaded=True)
-        except Exception as e:
-            print(f"server crashed with error : {e}", file=sys.stderr)
-
-    main()
-
+            except Exception as e:
+                print(f"server crashed with error : {e}", file=sys.stderr)
+        main()
+    return app
 
 

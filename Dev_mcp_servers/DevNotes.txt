@@ -1,3 +1,5 @@
+MCP_MODE=stdio uv run python mcp_tools_swebench.py stdio
+uv run gunicorn -w 4 -b 0.0.0.0:8042 mcp_tools_swebench:app
 
 Pass from Flask to WSGI
 https://python.plainenglish.io/tutorial-from-flasks-dev-server-to-production-with-apache-wsgi-6e986f404091

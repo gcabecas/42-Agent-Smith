@@ -354,8 +354,6 @@ class SWETools(McpToolsCore):
                             read += f"DEBUG {e}\n" # TODO
                             pass
 
-
-
         except Exception as e:
             self.message_complete(f"error encounter: {e}", tid, error=True)
             return
@@ -367,12 +365,14 @@ class SWETools(McpToolsCore):
 
     def run_tests(self, tid):
         self.operation_mutex.acquire()
+        workdir = os.environ.get("TESTBED_PATH")
+        if not workdir:
+            workdir = "."
 
-        time.sleep(10)
         read = ""
         try:
             result = subprocess.run(
-                    "test",
+                    "./test_dir/test.sh", # PLACEHOLDER SCRIPT TODO -!-!-!-!-!-!-!-!-!-!-!
                     cwd=workdir,
                     capture_output=True,
                     text=True,
@@ -388,9 +388,12 @@ class SWETools(McpToolsCore):
 
     def get_patch(self, tid):
         self.operation_mutex.acquire()
+        workdir = os.environ.get("TESTBED_PATH")
+        if not workdir:
+            workdir = "."
         read = ""
         try:
-            repo = Repo(".")
+            repo = Repo(workdir, search_parent_directories=True)
             read = repo.git.diff("HEAD")
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True) 

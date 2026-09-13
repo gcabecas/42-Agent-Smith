@@ -5,6 +5,7 @@ description = "Sub package for Agent-Smith project. This is the main MCP server,
 requires-python = ">= 3.10"
 dependencies = [
 		"flask",
+		"gunicorn",
 		"httpx",
 		"pydantic",
 		"tree-sitter",

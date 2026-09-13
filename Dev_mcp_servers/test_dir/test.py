@@ -1,19 +1,19 @@
 
 class Matchalate:
 
-    def __init__():
+    def __init__(self):
         pass
 
-    def helo():
+    def helo(self):
         pass
 
 
 class CloakStyle:
 
-    def wear():
+    def wear(self):
         pass
 
-    def compare():
+    def compare(self):
         pass
 
 
