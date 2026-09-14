@@ -8,8 +8,7 @@
     "heapq", "bisect", "copy",
     "string", "random",
     "datetime", "datetime.*",
-    "array", "cmath",
-    "urllib", "urllib.*"
+    "array", "cmath"
   ],
   "allowed_directories": ["/testbed", "/tmp/agent"],
   "max_execution_time_seconds": 30,
