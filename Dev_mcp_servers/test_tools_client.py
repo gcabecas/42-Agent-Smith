@@ -347,6 +347,11 @@ def run_test_stdio(
                     response_data["result"]["content"][0]["text"]
                     .startswith("diff --git")
                 )
+                if success:
+                    print(end="diff")
+                elif data_to_check == "":
+                    success = True
+                    print(end="no diff")
             case _:
                 success = False
 
