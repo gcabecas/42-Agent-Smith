@@ -38,77 +38,102 @@ def launch_server(type_tools: str, mode: str = "", host: str = "0.0.0.0", port: 
     def post_exchange() -> Response:
 
         request_format = """
-    Format is JSON-RPC 2.0 (MCP 2026-07-28) :
-
-    {
-      "jsonrpc": "2.0",
-      "id": <string|int>,
-      "method": <string>,
-      "params": { "_meta": {
+Use JSON-RPC 2.0 (MCP 2026-07-28) format :
+{
+    "jsonrpc": "2.0",
+    "id": <string|int>,
+    "method": <string>,
+    "params": { "_meta": {
         "io.modelcontextprotocol/protocolVersion": "2026-07-28",
         "io.modelcontextprotocol/clientCapabilities": {}
-      }, ... }
+        }
     }
+}
 
-    Exemples :
+Exemples :
 
-    tools/list :
-    {
-        "jsonrpc":"2.0","id":1,"method":"tools/list",
-        "params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
-        "io.modelcontextprotocol/clientCapabilities":{}}}
-     }
+tools/list :
+{
+    "jsonrpc":"2.0","id":1,"method":"tools/list",
+    "params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
+    "io.modelcontextprotocol/clientCapabilities":{}}}
+}
 
-    tools/call :
-    {
-        "jsonrpc":"2.0","id":2,"method":"tools/call",
-        "params":{"name":"nom_du_tool","arguments":{"arg1":"valeur"},
-        "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
-        "io.modelcontextprotocol/clientCapabilities":{}}}
-    }
+tools/call :
+{
+    "jsonrpc":"2.0","id":2,"method":"tools/call",
+    "params":{"name":"nom_du_tool","arguments":{"arg1":"valeur"},
+    "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
+    "io.modelcontextprotocol/clientCapabilities":{}}}
+}
 
-    server/discover :
-    {"jsonrpc":"2.0","id":3,"method":"server/discover","params":{}}"""
+server/discover :
+{"jsonrpc":"2.0","id":3,"method":"server/discover","params":{}}
+"""
+
 
         if mode == "stdio":
             input_data = tools.io_input.readline()
         else:
+            headers = {
+                    "MCP-Protocol-Version": request.headers.get("MCP-Protocol-Version"),
+                    "Mcp-Method": request.headers.get("Mcp-Method"),
+                    "Mcp-Name": request.headers.get("Mcp-Name"),
+            }
             input_data = request.data
+        rid = None
 
         try:
             data = json.loads(input_data)
+            if data.get("id") is not None and isinstance(data["id"], (int, str)):
+                rid = data["id"]
         except Exception as e:
-            msg = tools.message({"error": {"code": -32700, "message": "invalid json"}})
+            msg = tools.message({"error": {"code": -32700, "message": f"invalid json.{request_format}"}})
             return tools.response_error(msg, 400)
         try:
             valid1 = CheckRequestJson(data=data)
             rid = data["id"]
         except Exception as e:
-            msg = tools.message({"error": {"code": -32600, "message": f"json error {e}; look at the documentation the permited format"}})
+            if rid:
+                msg = tools.message({"error": {"id": rid, "code": -32600, "message": f"json error {e}.{request_format}"}})
+            else:
+                msg = tools.message({"error": {"code": -32600, "message": f"json error {e}.{request_format}"}})
             return tools.response_error(msg, 400)
         if data["method"] not in ["tools/list", "tools/call", "server/discover"]:
             msg = tools.message({"id": rid, "error": {"code": -32601, "message": "unknow method; possibles: tools/list | tools/call | server/discover   "}})
             return tools.response_error(msg, 200)
 
+        if data.get("params") is None:
+            raise ValueError("key 'params' not defined")
+
         try:
             match data["method"]:
                 case "tools/list":
-                    if data.get("params") is None:
-                        raise ValueError("key 'params' not defined")
                     CheckRequestParamsList(data=data["params"])
                 case "tools/call":
-                    if data.get("params") is None:
-                        raise ValueError("key 'params' not defined")
                     CheckRequestParamsCall(data=data["params"])
                     msg = tools.check_func_args(data["params"])
                     if msg:
                         raise ValueError(msg)
                 case "server/discover":
-                    if "params" in data.keys():
-                        raise ValueError("<params> key is useless and forbiden in server/discoover method")
+                    CheckRequestParamsList(data=data["params"])
         except Exception as e:
             msg = tools.message({"id": rid, "error": {"code": -32602, "message": f"params error;\n{e}"}})
             return tools.response_error(msg, 200)
+
+        if mode != "stdio":
+            check_headers = (
+                headers["MCP-Protocol-Version"] != data["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"] or
+                headers["Mcp-Method"] != data["method"] or
+                data.get("params") and data["params"].get("name") != headers["Mcp-Name"]
+            )
+            if headers["MCP-Protocol-Version"] != "2026-07-28":
+                msg = tools.message({"id": rid, "error": {"code": -32022, "message": f"unsuported version, server use 2026-07-28"}})
+                return tools.response_error(msg, 400)
+
+            if check_headers:
+                msg = tools.message({"id": rid, "error": {"code": -32020, "message": f"http header(s) missing or not match the body: {headers}"}})
+                return tools.response_error(msg, 400)
 
         match data["method"]:
             case "tools/list":
@@ -126,6 +151,8 @@ def launch_server(type_tools: str, mode: str = "", host: str = "0.0.0.0", port: 
                     "resultType": "complete",
                     "supportedVersions": ["2026-07-28"],
                     "capabilities": { "tools": {} },
+                    "ttlMs": 86400000,
+                    "cacheScope": "private"
                   }
                 }
                 msg = tools.message(minimal_discover)

@@ -59,9 +59,9 @@ class McpToolsCore(BaseModel):
             def response_error(msg: str | Generator, error: int) -> Response | None:
                 if isinstance(msg, Generator):
                     for elem in msg:
-                        print(f"error occured:", msg, file=self.io_output)
+                        print(msg, file=self.io_output)
                 else:
-                    print(f"error occured:", msg, file=self.io_output)
+                    print(msg, file=self.io_output)
                 return None
         self.response = response
         self.response_error = response_error
@@ -95,18 +95,18 @@ class McpToolsCore(BaseModel):
         name = func["name"]
         if name not in self.methods.keys():
             return f"error; unknow fonction used: {name}"
-        if not func.get("arguments"):
+        if func.get("arguments") is None:
             func.update({"arguments": dict()})
 
         for elem in self.methods[name].keys():
             if elem.startswith("_") and elem.endswith("_optional"):
                 continue
-            if not func["arguments"].get(elem) and not self.methods[name].get("_" + elem + "_optional"):
+            if func["arguments"].get(elem) is None and not self.methods[name].get("_" + elem + "_optional"):
                 log += f"error; missing argument: {elem}"
         
         for elem in func["arguments"].keys():
             s_elem = str(elem)
-            if not self.methods[name].get(s_elem):
+            if self.methods[name].get(s_elem) is None:
                 log += f"error; unknow argument used: {s_elem}"
             elif not isinstance(func["arguments"][s_elem], self.methods[name][s_elem]):
                 log += f"error; wrong type for {s_elem}; used: {type(func['arguments'][s_elem])}, needed: {self.methods[name][s_elem]}"
@@ -130,12 +130,12 @@ class McpToolsCore(BaseModel):
         else:
             thread = Thread(target=getattr(self, func["name"]), args=(tid,))
 
-        if data.get("progressToken"):
+        if data["params"]["_meta"].get("progressToken") is not None:
             notif_data = {
                     "jsonrpc": "2.0",
                     "method": "notifications/progress",
                     "params": {
-                        "progressToken": data.get("progressToken"),
+                        "progressToken": data["params"]["_meta"]["progressToken"],
                         "progress": 0,
                         "message": "in progress"
                     }
@@ -144,9 +144,9 @@ class McpToolsCore(BaseModel):
         else:
             notif_msg = ""
         thread.start()
+        start = time.time()
         while 1:
             time.sleep(0.01)
-            start = time.time()
             if not thread.is_alive():
                 self.queue_mutex.acquire()
                 rep = self.queue.pop(tid)
@@ -154,6 +154,7 @@ class McpToolsCore(BaseModel):
                 yield rep
                 break
             if notif_msg and start + 5 <= time.time():
+                start = time.time()
                 yield notif_msg
 
 
@@ -178,8 +179,7 @@ class RequestParamsBase(BaseModel):
                 if not isinstance(self.meta["progressToken"], (int, str)):
                     raise ValueError("wrong type for key 'progressToken' : need <int> or <string>")
                 n_valid = 3
-            if self.meta["io.modelcontextprotocol/protocolVersion"] != "2026-07-28":
-                raise ValueError("need key : io.modelcontextprotocol/protocolVersion == 2026-07-28")
+            self.meta["io.modelcontextprotocol/protocolVersion"]
             self.meta["io.modelcontextprotocol/clientCapabilities"]
             if len(self.meta.keys()) > n_valid:
                raise ValueError(

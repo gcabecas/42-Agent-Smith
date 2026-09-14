@@ -153,7 +153,7 @@ r'{"jsonrpc": "2.0", "id": 1, "result": {"resultType": "complete", "content": [{
     (
         "python precise /python : find_references",
         {"name": "find_references", "arguments": {"name": "usage", "filepath": "test_dir/ref_test_dir/one.py", "line": 10}},
-        r"""{"jsonrpc": "2.0", "id": 1, "result": {"resultType": "complete", "content": [{"type": "text", "text": "__OS_PATH_ABSOLUTE/test_dir/ref_test_dir/two.py:5 \n"}]}}"""
+        r"""{"jsonrpc": "2.0", "id": 1, "result": {"resultType": "complete", "content": [{"type": "text", "text": "/home/abenabde/Documents/M5/AgentSmith/Dev_mcp_servers/test_dir/ref_test_dir/two.py:5 obj.usage()\n\n"}]}}"""
 
     ),
 
@@ -228,6 +228,12 @@ def run_test(
         method,
         URL + path,
         content=request_text,
+        headers={
+            "MCP-Protocol-Version": "2026-07-28",
+            "Mcp-Method": "tools/call",
+            "Mcp-Name": base["params"]["name"],
+            "Content-Type": "application/json"
+        },
     )
    
     special_check = expected_text.startswith("_SPECIAL_CHECK")

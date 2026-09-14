@@ -86,18 +86,18 @@ class SWETools(McpToolsCore):
                 if pattern:
                     if pattern in elem:
                         path = f"{directory}/{elem}"
-                        if os.path.isdir(path):
-                            read += f"{path} <dir>\n"
-                        elif os.path.islink(path):
+                        if os.path.islink(path):
                             read += f"{path} <link>\n"
+                        elif os.path.isdir(path):
+                            read += f"{path} <dir>\n"
                         else:
                             read += f"{path} <file>\n"
                 else:
                     path = f"{directory}/{elem}"
-                    if os.path.isdir(path):
-                        read += f"{path} <dir>\n"
-                    elif os.path.islink(path):
+                    if os.path.islink(path):
                         read += f"{path} <link>\n"
+                    elif os.path.isdir(path):
+                        read += f"{path} <dir>\n"
                     else:
                         read += f"{path} <file>\n"
 
@@ -346,7 +346,7 @@ class SWETools(McpToolsCore):
                         try:
                             with open(ref.module_path, "r") as f_open:
                                 j = 0
-                                while j < the_line:
+                                while j < ref.line:
                                     content = f_open.readline()
                                     j += 1
                             read += f"{ref.module_path}:{ref.line} {content}\n"
@@ -441,6 +441,8 @@ class SWETools(McpToolsCore):
     "id": 0,  # Placeholder for the JSON-RPC request id supplied by the MCP client.
     "result": {
         "resultType": "complete",
+        "ttlMs": 86400000,
+        "cacheScope": "private",
         "tools": [
             {
                 "name": "read_file",
@@ -635,9 +637,9 @@ class SWETools(McpToolsCore):
             {
                 "name": "run_command",
                 "description": (
-                    "Execute a shell command in a specified working directory and "
-                    "return the command's standard output. The command is parsed "
-                    "into arguments before execution and is not run through a shell."
+                    "Execute a command in a specified working directory and return its "
+                    "standard output. The command is parsed into arguments and is not "
+                    "executed through a shell."
                 ),
                 "inputSchema": {
                     "type": "object",
