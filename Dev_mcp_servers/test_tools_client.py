@@ -343,10 +343,13 @@ def run_test_stdio(
 
         match check[1]:
             case "git diff":
-                success = (
-                    response_data["result"]["content"][0]["text"]
-                    .startswith("diff --git")
-                )
+                data_to_check = response_data["result"]["content"][0]["text"]
+                success = data_to_check.startswith("diff --git")
+                if success:
+                    print(end="diff")
+                elif data_to_check == "":
+                    success = True
+                    print(end="no diff")
                 if success:
                     print(end="diff")
                 elif data_to_check == "":
