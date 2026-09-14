@@ -175,7 +175,6 @@ r'{"jsonrpc": "2.0", "id": 1, "result": {"resultType": "complete", "content": [{
         "get git patch : get_patch",
         {"name": "get_patch"},
         r"""_SPECIAL_CHECK<cut-flag>git diff"""
-
     ),
     (
         "run a command : run_command",
@@ -237,7 +236,13 @@ def run_test(
         response_data = json.loads(response.text)
         match check[1]:
             case "git diff":
-                success = response_data["result"]["content"][0]["text"].startswith("diff --git")
+                data_to_check = response_data["result"]["content"][0]["text"]
+                success = data_to_check.startswith("diff --git")
+                if success:
+                    print(end="diff")
+                elif data_to_check == "":
+                    success = True
+                    print(end="no diff")
     else:
         success = (
             response.status_code == expected_status
