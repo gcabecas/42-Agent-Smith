@@ -1,5 +1,5 @@
 import os
-import Any
+from typing import Any
 
 
 def _is_authorized(path: str, allowed_directories: list[str]) -> bool:
@@ -12,7 +12,7 @@ def _is_authorized(path: str, allowed_directories: list[str]) -> bool:
 
 
 def restricted_open(allowed_directories: list[str],
-                    file: str, *args: tuple, **kwargs: dict) -> Any:
+                    file: str, *args: Any, **kwargs: Any) -> Any:
     if not _is_authorized(file, allowed_directories):
         raise PermissionError(f"access to '{file}' is not authorized")
     return open(file, *args, **kwargs)

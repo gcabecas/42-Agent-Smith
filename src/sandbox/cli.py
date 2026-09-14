@@ -1,9 +1,13 @@
 import argparse
 import codeop
+import sys
+from typing import Any, Callable
 
 from src.common.models import SandboxConfig
 from src.sandbox.config import load_config
 from src.sandbox.execute import Sandbox
+from src.sandbox.manual import build_manual
+from src.sandbox.mcp_client import McpClient
 
 
 def parse_args() -> argparse.Namespace:
@@ -12,6 +16,7 @@ def parse_args() -> argparse.Namespace:
                         default=SandboxConfig())
     parser.add_argument("--mcp-stdio")
     parser.add_argument("--mcp-server")
+    parser.add_argument("--manual", action="store_true")
     return parser.parse_args()
 
 
@@ -37,12 +42,13 @@ def read_entry() -> str | None:
             return source
 
 
-def repl(config: SandboxConfig) -> None:
-    with Sandbox(config) as sandbox:
+def repl(config: SandboxConfig,
+         tools: dict[str, Callable[..., Any]]) -> None:
+    with Sandbox(config, tools) as sandbox:
         while True:
             code = read_entry()
 
-            if code is None or code.strip() == "exit":
+            if code is None or code.strip() in ("exit", "exit()"):
                 break
 
             status, value, output = sandbox.run(code)
@@ -54,7 +60,17 @@ def repl(config: SandboxConfig) -> None:
 
 def main() -> None:
     args = parse_args()
-    repl(args.config)
+    if not (args.mcp_stdio or args.mcp_server):
+        return repl(args.config, {})
+    try:
+        client = McpClient(args.mcp_stdio, args.mcp_server)
+    except Exception as e:
+        sys.exit(f"sandbox: cannot connect to MCP server: {e}")
+    if args.manual:
+        print(build_manual(args.config, client.specs,
+                           client.resources, client.prompts))
+    else:
+        repl(args.config, client.tools)
 
 
 if __name__ == "__main__":
