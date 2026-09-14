@@ -8,7 +8,7 @@ import subprocess
 import json
 from pathlib import Path
 from pydantic import BaseModel, model_validator
-from flask import Flask, request, Response
+from flask import Flask, request
 import tree_sitter_language_pack as tslp
 import tree_sitter
 from git import Repo
@@ -62,7 +62,7 @@ class SWETools(McpToolsCore):
                     read += line
                     line = file.readline()
             if old_str in read:
-                new_read = read.replace(old_str, new_str)
+                new_read = read.replace(old_str, new_str, 1)
             else:
                 self.message_complete(f"error encounter: old_str not found in the file", tid, error=True)
                 return
@@ -351,7 +351,6 @@ class SWETools(McpToolsCore):
                                     j += 1
                             read += f"{ref.module_path}:{ref.line} {content}\n"
                         except Exception as e:
-                            read += f"DEBUG {e}\n" # TODO
                             pass
 
         except Exception as e:
@@ -437,118 +436,229 @@ class SWETools(McpToolsCore):
                 "run_command" : {"command": str, "workdir": str, "_workdir_optional": True}
         }
         super().__init__(*args, methods=methods, **kwargs)
-        self.model = """
-        {
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "resultType": "complete",
-    "tools": [
-      {
-        "name": "read_file",
-        "description": "Read the content of a file with line numbers (like 'cat -n').",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "filepath": { "type": "string" },
-            "start_line": { "type": "integer" },
-            "end_line": { "type": "integer" }
-          },
-          "required": ["filepath"]
-        }
-      },
-      {
-        "name": "edit_file",
-        "description": "Replace an exact string in a file with a new string.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "filepath": { "type": "string" },
-            "old_str": { "type": "string" },
-            "new_str": { "type": "string" }
-          },
-          "required": ["filepath", "old_str", "new_str"]
-        }
-      },
-      {
-        "name": "list_files",
-        "description": "List files in a directory matching a given pattern.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "directory": { "type": "string" },
-            "pattern": { "type": "string" }
-          },
-          "required": ["directory"]
-        }
-      },
-      {
-        "name": "search_code",
-        "description": "Perform a grep-like search in the codebase.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "pattern": { "type": "string" },
-            "file_pattern": { "type": "string" }
-          },
-          "required": ["pattern"]
-        }
-      },
-      {
-        "name": "search_function_or_class_definition_in_code",
-        "description": "Find the definition of a function or a class.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "name": { "type": "string" }
-          },
-          "required": ["name"]
-        }
-      },
-      {
-        "name": "find_references",
-        "description": "Find all usages of a symbol (function or class).",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "name": { "type": "string" },
-            "filepath": { "type": "string" },
-            "line": { "type": "integer" }
-          },
-          "required": ["name"]
-        }
-      },
-      {
-        "name": "run_tests",
-        "description": "Execute the evaluation script.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {},
-          "additionalProperties": false
-        }
-      },
-      {
-        "name": "get_patch",
-        "description": "Retrieve the unified git diff of all changes made to the repository.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {},
-          "additionalProperties": false
-        }
-      },
-      {
-        "name": "run_command",
-        "description": "Execute a shell command in the specified working directory. Returns stdout, stderr, and exit code.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "command": { "type": "string" },
-            "workdir": { "type": "string" }
-          },
-          "required": ["command"]
-        }
-      }
-    ]
-  }
+        self.model = {
+    "jsonrpc": "2.0",
+    "id": 0,  # Placeholder for the JSON-RPC request id supplied by the MCP client.
+    "result": {
+        "resultType": "complete",
+        "tools": [
+            {
+                "name": "read_file",
+                "description": (
+                    "Read part or all of a text file and return each selected line "
+                    "prefixed with its 1-based line number. By default, reads from "
+                    "the beginning of the file through the end."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "filepath": {
+                            "type": "string",
+                            "description": "Path to the file to read."
+                        },
+                        "start_line": {
+                            "type": "integer",
+                            "description": (
+                                "1-based first line to return. Values below 1 are "
+                                "treated as 1."
+                            )
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "description": (
+                                "1-based last line to return, inclusive. Defaults "
+                                "to the end of the file."
+                            )
+                        }
+                    },
+                    "required": ["filepath"]
+                }
+            },
+            {
+                "name": "edit_file",
+                "description": (
+                    "Replace the first occurrence of an exact string in a file with another "
+                    "string. Fails if the provided string is not found in the file."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "filepath": {
+                            "type": "string",
+                            "description": "Path to the file to modify."
+                        },
+                        "old_str": {
+                            "type": "string",
+                            "description": "Exact text to search for in the file."
+                        },
+                        "new_str": {
+                            "type": "string",
+                            "description": "Text that replaces every occurrence of old_str."
+                        }
+                    },
+                    "required": ["filepath", "old_str", "new_str"]
+                }
+            },
+            {
+                "name": "list_files",
+                "description": (
+                    "List the entries directly inside a directory. Optionally "
+                    "filter entries by requiring the pattern to appear in their "
+                    "filename. Each entry is identified as a directory, symbolic "
+                    "link, or regular file."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "directory": {
+                            "type": "string",
+                            "description": "Path to the directory to inspect."
+                        },
+                        "pattern": {
+                            "type": "string",
+                            "description": (
+                                "Optional substring that must be present in the "
+                                "entry name."
+                            )
+                        }
+                    },
+                    "required": ["directory"]
+                }
+            },
+            {
+                "name": "search_code",
+                "description": (
+                    "Search the repository recursively for an exact text pattern "
+                    "and return the matching file paths and line locations. "
+                    "Optionally restrict the search to paths containing a given "
+                    "file pattern."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {
+                            "type": "string",
+                            "description": "Exact text to search for."
+                        },
+                        "file_pattern": {
+                            "type": "string",
+                            "description": (
+                                "Optional substring that must be present in the "
+                                "file path for the file to be searched."
+                            )
+                        }
+                    },
+                    "required": ["pattern"]
+                }
+            },
+            {
+                "name": "search_function_or_class_definition_in_code",
+                "description": (
+                    "Search the repository recursively for function and class "
+                    "definitions whose declared name exactly matches the given "
+                    "name. Returns the file path and line containing each match."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": (
+                                "Exact function or class name to look for."
+                            )
+                        }
+                    },
+                    "required": ["name"]
+                }
+            },
+            {
+                "name": "find_references",
+                "description": (
+                    "Find usages of a function or class. For Python files, uses "
+                    "Jedi for symbol-aware reference resolution; for other "
+                    "supported source files, searches parsed symbol data. A "
+                    "filepath and optional line can be supplied to identify the "
+                    "specific definition to analyze."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Name of the function or class whose usages should be found."
+                        },
+                        "filepath": {
+                            "type": "string",
+                            "description": (
+                                "Optional source file containing the definition. "
+                                "Required when line is specified."
+                            )
+                        },
+                        "line": {
+                            "type": "integer",
+                            "description": (
+                                "Optional 1-based line containing the definition "
+                                "to analyze. Requires filepath."
+                            )
+                        }
+                    },
+                    "required": ["name"]
+                }
+            },
+            {
+                "name": "run_tests",
+                "description": (
+                    "Run the repository's evaluation test script and return its "
+                    "standard output. Uses TESTBED_PATH when it is defined; "
+                    "otherwise runs from the current working directory."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False
+                }
+            },
+            {
+                "name": "get_patch",
+                "description": (
+                    "Return the unified Git diff between the current working tree "
+                    "and HEAD, showing all uncommitted changes in the repository. "
+                    "Uses TESTBED_PATH when it is defined; "
+                    "otherwise runs from the current working directory."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False
+                }
+            },
+            {
+                "name": "run_command",
+                "description": (
+                    "Execute a shell command in a specified working directory and "
+                    "return the command's standard output. The command is parsed "
+                    "into arguments before execution and is not run through a shell."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": (
+                                "Command line to execute, including its arguments."
+                            )
+                        },
+                        "workdir": {
+                            "type": "string",
+                            "description": (
+                                "Optional working directory in which to execute "
+                                "the command."
+                            )
+                        }
+                    },
+                    "required": ["command"]
+                }
+            }
+        ]
+    }
 }
-        """

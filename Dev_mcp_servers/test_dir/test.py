@@ -21,13 +21,17 @@ def muffin():
     pass
 
 
-def helo():
+def goodbye():
     pass
 
 
 def compare():
     pass
 
+class Kek:
+
+    def helo(self):
+        pass
 
 # one
 # two

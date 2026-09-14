@@ -20,7 +20,7 @@ class McpToolsCore(BaseModel):
     io_error: Any = sys.stderr
     io_input: Any = sys.stdin
 
-    model: str = ""
+    model: dict[str, Any] = dict()
     methods: dict[str, Any]
     response: Callable[..., Response | None] = placeholder
     response_error: Callable[..., Response | None] = placeholder
@@ -43,16 +43,25 @@ class McpToolsCore(BaseModel):
             raise ValueError("in_format invalid, possible : http | stdio")
 
         if self.out_format == "http":
-            def response(msg: str) -> Response | None:
+            def response(msg: str | Generator) -> Response | None:
                 return Response(msg)
-            def response_error(msg: str, error: int) -> Response | None:
+
+            def response_error(msg: str | Generator, error: int) -> Response | None:
                 return Response(msg, status=error)
         else:
-            def response(msg: str) -> Response | None:
-                print(msg, file=self.io_output)
+            def response(msg: str | Generator) -> Response | None:
+                if isinstance(msg, Generator):
+                    for elem in msg:
+                        print(elem, file=self.io_output)
+                else:
+                    print(msg, file=self.io_output)
                 return None
-            def response_error(msg: str, error: int) -> Response | None:
-                print(f"error occured:", msg, file=self.io_error)
+            def response_error(msg: str | Generator, error: int) -> Response | None:
+                if isinstance(msg, Generator):
+                    for elem in msg:
+                        print(f"error occured:", msg, file=self.io_output)
+                else:
+                    print(f"error occured:", msg, file=self.io_output)
                 return None
         self.response = response
         self.response_error = response_error

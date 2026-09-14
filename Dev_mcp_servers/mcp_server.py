@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from mcp_swebench_core import SWETools
 from mcp_tools_core import CheckRequestJson, CheckRequestParamsList, CheckRequestParamsCall
 
-def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str = "0.0.0.0") -> Flask:
+def launch_server(type_tools: str, mode: str = "", host: str = "0.0.0.0", port: int = 8042) -> Flask:
 
     if mode == "stdio":
         out_format = "stdio"
@@ -38,7 +38,7 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
     def post_exchange() -> Response:
 
         request_format = """
-    Format JSON-RPC 2.0 (MCP 2026-07-28) :
+    Format is JSON-RPC 2.0 (MCP 2026-07-28) :
 
     {
       "jsonrpc": "2.0",
@@ -71,22 +71,23 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
     {"jsonrpc":"2.0","id":3,"method":"server/discover","params":{}}"""
 
         if mode == "stdio":
-            input_data = input(tools.io_input)
+            input_data = tools.io_input.readline()
         else:
             input_data = request.data
 
         try:
-            data = json.loads(request.data)
+            data = json.loads(input_data)
         except Exception as e:
             msg = tools.message({"error": {"code": -32700, "message": "invalid json"}})
             return tools.response_error(msg, 400)
         try:
             valid1 = CheckRequestJson(data=data)
+            rid = data["id"]
         except Exception as e:
             msg = tools.message({"error": {"code": -32600, "message": f"json error {e}; look at the documentation the permited format"}})
             return tools.response_error(msg, 400)
         if data["method"] not in ["tools/list", "tools/call", "server/discover"]:
-            msg = tools.message({"error": {"code": -32601, "message": "unknow method; possibles: tools/list | tools/call | server/discover   "}})
+            msg = tools.message({"id": rid, "error": {"code": -32601, "message": "unknow method; possibles: tools/list | tools/call | server/discover   "}})
             return tools.response_error(msg, 200)
 
         try:
@@ -106,18 +107,21 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
                     if "params" in data.keys():
                         raise ValueError("<params> key is useless and forbiden in server/discoover method")
         except Exception as e:
-            msg = tools.message({"error": {"code": -32602, "message": f"params error;\n{e}"}})
+            msg = tools.message({"id": rid, "error": {"code": -32602, "message": f"params error;\n{e}"}})
             return tools.response_error(msg, 200)
 
         match data["method"]:
             case "tools/list":
-                return Response(tools.model)
+                send_data = tools.model
+                send_data["id"] = rid
+                msg = tools.message(send_data)
+                return tools.response(msg)
             case "tools/call":
-                return Response(tools.tools_call(data["params"], data))
+                return tools.response(tools.tools_call(data["params"], data))
             case "server/discover":
                 minimal_discover = {
                   "jsonrpc": "2.0",
-                  "id": "discover-1",
+                  "id": rid,
                   "result": {
                     "resultType": "complete",
                     "supportedVersions": ["2026-07-28"],
@@ -125,9 +129,9 @@ def launch_server(type_tools: str, mode: str = "", port: int = 8042, host: str =
                   }
                 }
                 msg = tools.message(minimal_discover)
-                return Response(msg)
+                return tools.response(msg)
 
-        msg = tools.message({"error": {"code": -32603, "message": f"impossible error encounter"}})
+        msg = tools.message({"id": rid, "error": {"code": -32603, "message": f"impossible error encounter"}})
         return tools.response_error(msg, 200)
 
     if mode == "stdio":
