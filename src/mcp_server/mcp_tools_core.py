@@ -43,13 +43,13 @@ class McpToolsCore(BaseModel):
             raise ValueError("in_format invalid, possible : http | stdio")
 
         if self.out_format == "http":
-            def response(msg: str | Generator) -> Response | None:
-                return Response(msg)
+            def response(msg: str | Generator, *, content: str = "application/json") -> Response | None:
+                return Response(msg, content_type=content)
 
             def response_error(msg: str | Generator, error: int) -> Response | None:
-                return Response(msg, status=error)
+                return Response(msg, status=error, content_type="application/json")
         else:
-            def response(msg: str | Generator) -> Response | None:
+            def response(msg: str | Generator, *, content: str = "application/json") -> Response | None:
                 if isinstance(msg, Generator):
                     for elem in msg:
                         print(elem, file=self.io_output)
@@ -181,10 +181,6 @@ class RequestParamsBase(BaseModel):
                 n_valid = 3
             self.meta["io.modelcontextprotocol/protocolVersion"]
             self.meta["io.modelcontextprotocol/clientCapabilities"]
-            if len(self.meta.keys()) > n_valid:
-               raise ValueError(
-                            f"unknow key detected in {self.meta};\n"
-                            "only use io.modelcontextprotocol/protocolVersion and io.modelcontextprotocol/clientCapabilities") 
         except Exception as e:
             raise ValueError(
                     f'error "{e}" _meta data not correctly set, use strictly:'
@@ -207,4 +203,3 @@ class CheckRequestParamsList(BaseModel):
 
 class CheckRequestParamsCall(BaseModel):
     data: RequestParamsCall
-

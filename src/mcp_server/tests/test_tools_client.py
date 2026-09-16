@@ -153,7 +153,7 @@ r'{"jsonrpc": "2.0", "id": 1, "result": {"resultType": "complete", "content": [{
     (
         "python precise /python : find_references",
         {"name": "find_references", "arguments": {"name": "usage", "filepath": "test_dir/ref_test_dir/one.py", "line": 10}},
-        r"""{"jsonrpc": "2.0", "id": 1, "result": {"resultType": "complete", "content": [{"type": "text", "text": "/home/abenabde/Documents/M5/AgentSmith/Dev_mcp_servers/test_dir/ref_test_dir/two.py:5 obj.usage()\n\n"}]}}"""
+        r"""{"jsonrpc": "2.0", "id": 1, "result": {"resultType": "complete", "content": [{"type": "text", "text": "__OS_PATH_ABSOLUTE/test_dir/ref_test_dir/two.py:5 obj.usage()\n\n"}]}}"""
 
     ),
 
@@ -267,9 +267,6 @@ def run_test(
 
 
 def main_http():
-    if os.path.basename(os.path.abspath(".")) != "Dev_mcp_servers":
-        print("Please launch tests in the 'Dev_mcp_servers' dir")
-        return
 
     passed = 0
 
@@ -382,9 +379,6 @@ def run_test_stdio(
 
 
 def main_stdio():
-    if os.path.basename(os.path.abspath(".")) != "Dev_mcp_servers":
-        print("Please launch tests in the 'Dev_mcp_servers' dir")
-        return
 
     passed = 0
 

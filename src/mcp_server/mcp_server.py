@@ -100,7 +100,7 @@ server/discover :
                 msg = tools.message({"error": {"code": -32600, "message": f"json error {e}.{request_format}"}})
             return tools.response_error(msg, 400)
         if data["method"] not in ["tools/list", "tools/call", "server/discover"]:
-            msg = tools.message({"id": rid, "error": {"code": -32601, "message": "unknow method; possibles: tools/list | tools/call | server/discover   "}})
+            msg = tools.message({"id": rid, "error": {"code": -32601, "message": f"unknow method {data['method']}; possibles: tools/list | tools/call | server/discover   "}})
             return tools.response_error(msg, 200)
 
         if data.get("params") is None:
@@ -142,7 +142,7 @@ server/discover :
                 msg = tools.message(send_data)
                 return tools.response(msg)
             case "tools/call":
-                return tools.response(tools.tools_call(data["params"], data))
+                return tools.response(tools.tools_call(data["params"], data), content="text/event-stream")
             case "server/discover":
                 minimal_discover = {
                   "jsonrpc": "2.0",
