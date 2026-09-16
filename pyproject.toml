@@ -15,6 +15,7 @@ dependencies = [
     "tree-sitter-language-pack",
     "GitPython",
     "jedi",
+	"OpenAI"
 ]
 
 [project.scripts]
