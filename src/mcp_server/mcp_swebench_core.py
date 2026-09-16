@@ -15,7 +15,7 @@ from git import Repo
 import jedi
 import shlex
 
-from mcp_tools_core import McpToolsCore
+from src.mcp_server.mcp_tools_core import McpToolsCore
 
 # TOOLS ---------------------------------------//
 

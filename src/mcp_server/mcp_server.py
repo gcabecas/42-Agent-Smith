@@ -5,8 +5,8 @@ from typing import Any, Literal, Optional, Callable, Generator
 from flask import Flask, request, Response
 from pydantic import ValidationError
 
-from mcp_swebench_core import SWETools
-from mcp_tools_core import CheckRequestJson, CheckRequestParamsList, CheckRequestParamsCall
+from src.mcp_server.mcp_swebench_core import SWETools
+from src.mcp_server.mcp_tools_core import CheckRequestJson, CheckRequestParamsList, CheckRequestParamsCall
 
 def launch_server(type_tools: str, mode: str = "", host: str = "0.0.0.0", port: int = 8042) -> Flask:
 

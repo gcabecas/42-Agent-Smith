@@ -9,7 +9,12 @@ dependencies = [
     "mypy>=1.0",
     "mcp>=2.2.0",
     "flask",
+    "gunicorn",
     "httpx",
+    "tree-sitter",
+    "tree-sitter-language-pack",
+    "GitPython",
+    "jedi",
 ]
 
 [project.scripts]
