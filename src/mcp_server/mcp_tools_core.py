@@ -1,4 +1,3 @@
-
 import sys
 import json
 import time
@@ -11,6 +10,7 @@ from pydantic import BaseModel, model_validator, ConfigDict, Field
 
 def placeholder(*args, **kwargs) -> None:
     pass
+
 
 class McpToolsCore(BaseModel):
 
@@ -43,45 +43,62 @@ class McpToolsCore(BaseModel):
             raise ValueError("in_format invalid, possible : http | stdio")
 
         if self.out_format == "http":
-            def response(msg: str | Generator, *, content: str = "application/json") -> Response | None:
+
+            def response(
+                msg: str | Generator, *, content: str = "application/json"
+            ) -> Response | None:
                 return Response(msg, content_type=content)
 
-            def response_error(msg: str | Generator, error: int) -> Response | None:
-                return Response(msg, status=error, content_type="application/json")
+            def response_error(
+                msg: str | Generator, error: int
+            ) -> Response | None:
+                return Response(
+                    msg, status=error, content_type="application/json"
+                )
+
         else:
-            def response(msg: str | Generator, *, content: str = "application/json") -> Response | None:
+
+            def response(
+                msg: str | Generator, *, content: str = "application/json"
+            ) -> Response | None:
                 if isinstance(msg, Generator):
                     for elem in msg:
                         print(elem, file=self.io_output)
                 else:
                     print(msg, file=self.io_output)
                 return None
-            def response_error(msg: str | Generator, error: int) -> Response | None:
+
+            def response_error(
+                msg: str | Generator, error: int
+            ) -> Response | None:
                 if isinstance(msg, Generator):
                     for elem in msg:
                         print(msg, file=self.io_output)
                 else:
                     print(msg, file=self.io_output)
                 return None
+
         self.response = response
         self.response_error = response_error
 
         return self
-    
+
     def message(self, infos: dict[str, Any]) -> str:
         base = {"jsonrpc": "2.0"}
         base.update(infos)
         return json.dumps(base)
 
-    def message_complete(self, msg: str, tid: int, error: bool = False) -> None:
+    def message_complete(
+        self, msg: str, tid: int, error: bool = False
+    ) -> None:
 
         msg_data: dict[str, Any] = {
-                "jsonrpc": "2.0",
-                "id": tid,
-                "result": {
-                    "resultType": "complete",
-                    "content": [{"type": "text", "text": msg}]
-                }
+            "jsonrpc": "2.0",
+            "id": tid,
+            "result": {
+                "resultType": "complete",
+                "content": [{"type": "text", "text": msg}],
+            },
         }
         if error:
             msg_data["result"]["isError"] = True
@@ -94,22 +111,30 @@ class McpToolsCore(BaseModel):
         log = ""
         name = func["name"]
         if name not in self.methods.keys():
-            return f"error; unknow fonction used: {name}"
+            return f"error; unknown fonction used: {name}"
         if func.get("arguments") is None:
             func.update({"arguments": dict()})
 
         for elem in self.methods[name].keys():
             if elem.startswith("_") and elem.endswith("_optional"):
                 continue
-            if func["arguments"].get(elem) is None and not self.methods[name].get("_" + elem + "_optional"):
+            if func["arguments"].get(elem) is None and not self.methods[
+                name
+            ].get("_" + elem + "_optional"):
                 log += f"error; missing argument: {elem}"
-        
+
         for elem in func["arguments"].keys():
             s_elem = str(elem)
             if self.methods[name].get(s_elem) is None:
-                log += f"error; unknow argument used: {s_elem}"
-            elif not isinstance(func["arguments"][s_elem], self.methods[name][s_elem]):
-                log += f"error; wrong type for {s_elem}; used: {type(func['arguments'][s_elem])}, needed: {self.methods[name][s_elem]}"
+                log += f"error; unknown argument used: {s_elem}"
+            elif not isinstance(
+                func["arguments"][s_elem], self.methods[name][s_elem]
+            ):
+                log += (
+                        f"error; wrong type for {s_elem}; used: "
+                        f"{type(func['arguments'][s_elem])}, "
+                        f"needed: {self.methods[name][s_elem]}"
+                )
         if log:
             log = "[key 'arguments' error. missing or wrong value]\n" + log
         return log
@@ -118,27 +143,33 @@ class McpToolsCore(BaseModel):
         return Response(self.model)
 
     def server_discover(self) -> Response:
-        return Response("") # TODO
+        return Response("")  # TODO
 
-    def tools_call(self, func: dict[str, Any], data: dict[str, Any]) -> Generator[str, None, None]:
+    def tools_call(
+        self, func: dict[str, Any], data: dict[str, Any]
+    ) -> Generator[str, None, None]:
         self.queue_mutex.acquire()
         tid = data["id"]
         self.queue_mutex.release()
 
         if func.get("arguments") and func["arguments"]:
-            thread = Thread(target=getattr(self, func["name"]), args=(tid,), kwargs=func["arguments"])
+            thread = Thread(
+                target=getattr(self, func["name"]),
+                args=(tid,),
+                kwargs=func["arguments"],
+            )
         else:
             thread = Thread(target=getattr(self, func["name"]), args=(tid,))
 
         if data["params"]["_meta"].get("progressToken") is not None:
             notif_data = {
-                    "jsonrpc": "2.0",
-                    "method": "notifications/progress",
-                    "params": {
-                        "progressToken": data["params"]["_meta"]["progressToken"],
-                        "progress": 0,
-                        "message": "in progress"
-                    }
+                "jsonrpc": "2.0",
+                "method": "notifications/progress",
+                "params": {
+                    "progressToken": data["params"]["_meta"]["progressToken"],
+                    "progress": 0,
+                    "message": "in progress",
+                },
             }
             notif_msg = self.message(notif_data)
         else:
@@ -165,8 +196,10 @@ class RequestJson(BaseModel):
     method: str
     params: Optional[Any] = None
 
+
 class CheckRequestJson(BaseModel):
     data: RequestJson
+
 
 class RequestParamsBase(BaseModel):
     meta: dict[str, Any] = Field(alias="_meta")
@@ -174,32 +207,39 @@ class RequestParamsBase(BaseModel):
     @model_validator(mode="after")
     def checkmeta(self) -> "RequestParamsBase":
         try:
-            n_valid = 2
             if self.meta.get("progressToken"):
                 if not isinstance(self.meta["progressToken"], (int, str)):
-                    raise ValueError("wrong type for key 'progressToken' : need <int> or <string>")
-                n_valid = 3
+                    raise ValueError(
+                        "wrong type for key 'progressToken' :"
+                        " need <int> or <string>"
+                    )
             self.meta["io.modelcontextprotocol/protocolVersion"]
             self.meta["io.modelcontextprotocol/clientCapabilities"]
         except Exception as e:
             raise ValueError(
-                    f'error "{e}" _meta data not correctly set, use strictly:'
-                    '"params": { "_meta": {'
-                    '   "io.modelcontextprotocol/protocolVersion": "2026-07-28"',
-                    '   "io.modelcontextprotocol/clientCapabilities": {} # Mandatory Key; Argument ignored by the server'
-                    '}, ... }')
+                f'error "{e}" _meta data not correctly set, use strictly:\n'
+                '"params": { "_meta": {\n'
+                '   "io.modelcontextprotocol/protocolVersion": "2026-07-28",\n'
+                '   "io.modelcontextprotocol/clientCapabilities":'
+                ' {} # Mandatory Key; Argument ignored by the server\n'
+                "}, ... }"
+            )
         return self
+
 
 class RequestParamsList(RequestParamsBase):
     model_config = ConfigDict(extra="forbid")
+
 
 class RequestParamsCall(RequestParamsBase):
     model_config = ConfigDict(extra="forbid")
     name: str
     arguments: dict[str, Any] = dict()
 
+
 class CheckRequestParamsList(BaseModel):
     data: RequestParamsList
+
 
 class CheckRequestParamsCall(BaseModel):
     data: RequestParamsCall
