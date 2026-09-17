@@ -2,46 +2,9 @@
 from pydantic import BaseModel, Field
 import sys
 from typing import Optional
-from openai import OpenAI
 
-class Log:
-    logs: str = ""
-    log: dict[str, str] = dict()
-
-    @classmethod
-    def add_logs(cls, add: str) -> None:
-        cls.logs += f"{add}\n"
-
-    @classmethod
-    def get_logs(cls) -> str:
-        return cls.logs
-
-    @classmethod
-    def print_logs(cls) -> None:
-        print(cls.logs, file=sys.stderr)
-
-    @classmethod
-    def add_log(cls, add: str, log_type: str) -> None:
-        if cls.log.get(log_type):
-            cls.log[log_type] += f"{add}\n"
-        else:
-            cls.log[log_type] = f"{add}\n"
-
-    @classmethod
-    def get_log(cls, log_type) -> str:
-        return cls.log[log_type]
-
-    @classmethod
-    def get_all_log(cls) -> dict[str, str]:
-        return cls.log
-
-    @classmethod
-    def print_log(cls, log_type: str) -> None:
-        print(cls.log[log_type], file=sys.stderr)
-
-    @classmethod
-    def print_all_log(cls) -> None:
-        print(cls.log, file=sys.stderr)
+from datetime import datetime
+from helpers import LlmApi, Log
 
 class StepMetrics(BaseModel):
     """Metrics for a single agent step.
@@ -77,7 +40,6 @@ class StepMetrics(BaseModel):
     ]
 }
 
-import datetime
 
 class SolutionOutput(BaseModel):
     """Output from student solution, required format for evaluation.
@@ -91,46 +53,27 @@ class SolutionOutput(BaseModel):
     solution: str = Field(default="", description="For MBPP: the Python function code For SWE-bench: the git patch (diff)")
     iterations: int = Field(default=0, description="Number of agent loop iteration used")
     total_requests: int = Field(default=0, description="Total number of LLM AP requests made (including retries)")
-
-
     total_input_tokens: int = Field(default=0, description="Sum of input_token across all steps")
-
-
     total_output_tokens: int = Field(default=0, description="Sum of output_token across all steps")
     total_time_seconds: float = Field(default=0, description="Wall-clock time fro agent start to finish")
-    steps: list[StepMetrics] = Field(default=[], default_factory=list, description="Per step metrics, one entry per agent iteration")
-    system_prompt: str = Field(default="", description="Full system prompt sen to the LLM (for provenance checking)")
+    steps: list[StepMetrics] = Field(default_factory=list, description="Per step metrics, one entry per agent iteration")
+    system_prompt: str = Field(description="Full system prompt sen to the LLM (for provenance checking)")
     error: Optional[str] = Field(default=None, description="Error message i the agent failed (None if successful)")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="ISO 8601 timestamp of when the solution was produced")
 
-""" MBPP
-Implement an agent CLI interface
-# 1. Dump a task
-cd moulinette
-uv run moulinette_eval dump mbpp --output ../cache/mbpp_task.json
-# 2. Run your agent
-cd ../student
-uv run python -m agent_mbpp --task-file ../cache/mbpp_task.json \
---output ../cache/mbpp_solution.json \
---model-name "model/name" --provider-url "https://provider.api/v1"
-# 3. Validate solution
-cd ../moulinette
-uv run moulinette_eval validate mbpp ../cache/mbpp_task.json \
-../cache/mbpp_solution.json
-"""
 
-class MBPPTaskInput(BaseModel):
-    """Input for MBPP task evaluation."""
-    task_id: int
-    task_definition: str
-    function_definition: str
-    test_imports: list[str] = Field(default_factory=list)
-    test_list: list[str] = Field(default_factory=list)
+class Agent(SolutionOutput):
+    model_config = {"arbitrary_types_allowed": True}
+
+    output_path: str = Field(pattern=r".*\.json$")
+    llmapi: LlmApi
+    
+    pass
+#    def __init__(self) -> None:
+#        self.client = LlmApi
+#        pass
 
 
-def create_mbpp_agent(task: MBPPTaskInput) -> MBPPAgent:
-    obj = MBPPAgent(
-            task_id=task.task_id, benchmark="mbpp")
 
 """ SWE
 Implement an agent CLI interface
@@ -148,6 +91,12 @@ uv run moulinette_eval validate swebench ../cache/swebench_task.json \
 ../cache/swebench_solution.json
 """
 
+
+
+
+
+
+
 class SWEBenchTaskInput(BaseModel):
     """Input for a SWE-bench task, provided by the moulinette.
     Your agent receives this and must produce a git patch that fixes
@@ -161,130 +110,13 @@ class SWEBenchTaskInput(BaseModel):
     repo: str = Field(default="", description="Repository name (e.g., 'sympy/sympy')")
 
 
-class Agent(SolutionOutput):
-    def __init__(self) -> None:
-        self.client = LlmApi
-        pass
-
-class MBPPAgent(Agent):
-    def __init__(self, taskinput: MBPPTaskInput) -> None:
-        pass
-    pass
-
 class SWEAgent(Agent):
     def __init__(self, taskinput: SWEBenchTaskInput) -> None:
         pass
     pass
 
-from collections import deque
-import time
 import os
 import sys
-# import Log
-
-class LlmApiError(Exception):
-    pass
-
-class LlmApi:
-
-    def __str__(self) -> str:
-        info = "\n".join([str(u) for u in self.urls])
-        return f"{self.iurl}:iurl {self.imodel}:imodel\n{info}\n"
-
-    def __init__(self, agent_prompt: str, baseurl: str = "", basemodel: str = "") -> None:
-        if not baseurl.endswith("/"):
-            baseurl = f"{baseurl}/"
-        self.agent_msg = agent_prompt
-        self.iurl = -1
-        self.imodel = -1
-        self.urls = [
-                {
-                    "name": "grok", "models": ["1", "2"],
-                    "client": OpenAI(
-                                    base_url="xxx",
-                                    api_key=os.getenv("GROK_API_KEY", "0")
-                                    )
-                },
-                {
-                    "name": "google", "models": ["3", "4"],
-                    "client": OpenAI(
-                                    base_url="yyy",
-                                    api_key=os.getenv("GOOGLE_API_KEY", "0")
-                                    )
-                },
-                {
-                    "name": "openrouter", "models": ["5", "6"],
-                    "client": OpenAI(
-                                    base_url="zzz",
-                                    api_key=os.getenv("OPENROUTER_API_KEY", "0")
-                                    )
-                }
-        ] 
-        if baseurl and not basemodel:
-            raise LlmApiError("url set need a model")
-        if not baseurl and basemodel:
-            raise LlmApiError("model set need an url")
-        if baseurl and basemodel:
-            i = 0
-            for url in self.urls:
-                if url["client"].base_url == baseurl:
-                    if basemodel not in url["models"]:
-                        url["models"].append(basemodel)
-                        self.iurl = i
-                        self.imodel = len(url["models"]) - 1
-                        break
-                    else:
-                        self.iurl = i
-                        self.imodel = url["models"].index(basemodel)
-                        break
-                i += 1
-            if i == len(self.urls):
-                self.urls.append({
-                    "name": baseurl, "models": [basemodel],
-                    "client": OpenAI(
-                                    base_url=baseurl,
-                                    api_key=os.getenv("EXTRA_API_KEY", "0")
-                                    )
-                })
-        if self.iurl == -1:
-            self.iurl = len(self.urls) - 1
-            self.imodel = len(self.urls[self.iurl]["models"]) - 1
-
-    def response(self, msg: str, tokens: int) -> dict[str, str | int]:
-
-        while 1:
-            try:
-                response = self.urls[self.iurl]["client"].chat.completions.create(
-                        model=self.urls[self.iurl]["models"][self.imodel],
-                        messages=[{"role": "system", "content": self.agent_msg}],
-                        messages=[{"role": "agent", "content": msg}],
-                        max_tokens=tokens
-                )
-                return {
-                        "message": response.choices[0].message.content,
-                        "usage": response.usage.completion_tokens
-                }
-            except Exception as e:
-                usr = self.urls[self.iurl]
-                msg = (
-                        f"{usr['name']}"
-                        f"|{usr['models'][self.imodel]}: {e}"
-                )
-                Log.add_logs(msg)
-                print(msg, file=sys.stderr)
-                self.next()
-                # time.sleep(0.1)
-        return dict()
-
-    def next(self) -> None:
-        if self.imodel == 0:
-            if self.iurl == 0:
-                self.iurl = len(self.urls) - 1
-            else:
-                self.iurl -= 1
-            self.imodel = len(self.urls[self.iurl]["models"]) - 1
-        else:
-            self.imodel -= 1
 
 def test_llmapi() -> None:
     try:
@@ -310,9 +142,16 @@ def test_llmapi() -> None:
     rep = obj4.response("code pls", "helo", 60)
     print("rep", rep)
 
+import json
 if __name__ == "__main__":
+    test = "mbpp_test_task.json"
+    with open(test, "r") as file:
+        mbpp_data = json.load(file)
+    mbpp = NewMBPPTaskInput(data=mbpp_data).data
+    obj = create_mbpp_agent(mbpp)
     try:
-        test_llmapi()
+        pass
+#        test_llmapi()
     except KeyboardInterrupt:
         print(Log.get_logs())
     except Exception as e:

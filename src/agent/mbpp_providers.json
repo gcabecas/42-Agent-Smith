@@ -1,0 +1,12 @@
+[
+	{
+		"name": "google", "models": ["gemini-3.8-flash"],
+		"url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+		"api_key": "GOOGLE_API_KEY"
+	},
+	{
+		"name": "openrouter", "models": ["thinkingmachines/inkling:free"],
+		"url": "https://openrouter.ai/api/v1",
+		"api_key": "OPENROUTER_API_KEY"
+	}
+]

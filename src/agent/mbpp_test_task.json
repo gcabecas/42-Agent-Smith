@@ -1,0 +1,12 @@
+{
+    "task_id": 1,
+    "task_definition": "Create a function without argument that returns the time passed since it was last call in int ms",
+    "function_definition": "count_time",
+    "test_imports": [
+		"time"
+	],
+    "test_list": [
+		"assert count_time() == 0",
+		"def _test():\n    time.sleep(0.2)\n    assert 200 <= count_time() <= 400\n_test()"
+	]
+}
