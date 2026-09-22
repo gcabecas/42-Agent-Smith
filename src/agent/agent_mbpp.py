@@ -1,6 +1,6 @@
 
 from typing import Any
-from helpers import LlmApi
+from helpers import Log, LlmApi, MemoryPrompt
 from agent import Agent
 import json
 
@@ -41,19 +41,110 @@ class MBPPAgent(Agent):
     test_imports: list[str] = Field(default_factory=list)
     test_list: list[str] = Field(default_factory=list)
 
-    def create_prompte(self) -> None:
-        bal = "<>"
-        ebal = "<>"
 
-        base = ""
+def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
+        providers_file: str = "mbpp_providers.json",
+        provider_url: str = "", model_name: str = "") -> MBPPAgent:
 
-    def process(self) -> None:
-        # create prompte -> ask -> extract code -> run code -<<>
+    with open(task_file, "r") as file:
+        mbpp_data = json.load(file)
+    task = NewMBPPTaskInput(data=mbpp_data).data
 
+    system_prompt = "You are a python coding agent, you need to fix the user code problem(s), you can use available tools or response with Python code"
+    user_prompt = f"You need to responde to the task {task}"
+
+    llmapi = LlmApi(providers_file, system_prompt, provider_url, model_name)
+    prompt=MemoryPrompt(system_prompt, user_prompt)
+    
+    agent = MBPPAgent(
+                task_id=str(task.task_id), benchmark="mbpp",
+                system_prompt=system_prompt, output_path=output,
+                task_definition=task.task_definition,
+                function_definition=task.function_definition,
+                test_imports=task.test_imports
+                test_list=task.test_list
+
+                llmapi=llmapi,
+                prompt=prompt
+    )
+    return agent
+
+import sys
+import traceback
+import fire
+
+
+def main(*args: Any, **kwargs: Any) -> None:
+    agent = create_mbpp_agent(**kwargs)
+    try:
+        check = True
+        while check:
+            check = agent.next_step()
+    except Exception:
+        print(traceback.format_exc())
+    finally:
         pass
-        
-       
+
+if __name__ == "__main__":
+    try:
+        fire.Fire(main)
+    except Exception:
+        print(traceback.format_exc())
+
+
+
+
+
+
+# TEMPORARY LINES/CODE/DATA ------------------------------------------------------------------------------------\/
+
+import os
+import sys
+
+def test_llmapi() -> None:
+    try:
+        obj1 = LlmApi("mbpp_providers.json", "kek", "")
+        print(obj1.iurl)
+    except Exception as e:
+        print("\nt1", e)
+    try:
+        obj2 = LlmApi("mbpp_providers.json", "", "kek")
+        print(obj2.iurl)
+    except Exception as e:
+        print("\nt2", e)
+
+    obj3 = LlmApi("mbpp_providers.json", "kek", "model")
+    print("\nt3", obj3)
+
+    obj4 = LlmApi("mbpp_providers.json", "yyy", "model")
+    print("\nt4", obj4)
+
+    obj5 = LlmApi("mbpp_providers.json", "zzz", "5")
+    print("\nt5", obj5)
+
+    rep = obj4.response("mbpp_providers.json", "helo", 60)
+    print("rep", rep)
+
+#import json
+#if __name__ == "__main__":
+#    try:
+#        test_llmapi()
+#    except KeyboardInterrupt:
+#        print(Log.get_logs())
+#    except Exception as e:
+#        print(Log.get_logs(), f"error: {e}")
+
+
+
+# ------------------------- IDEAS ------------------------
+
+
 """
+
+Your mandatory tools are only present when your own MCP
+server is connected.
+
+
 PROCESS
 
 context idee / MEMORY :
@@ -118,39 +209,4 @@ edit buffer arg lignes n
 
 """
 
-
-
-def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
-        providers_file: str = "mbpp_providers.json",
-        provider_url: str = "", model_name: str = "") -> MBPPAgent:
-
-    system_prompt = "You are a python coding agent, you need to fix the user code problem(s), you can use available tools or response with Python code"
-
-    with open(task_file, "r") as file:
-        mbpp_data = json.load(file)
-    task = NewMBPPTaskInput(data=mbpp_data).data
-
-    llmapi = LlmApi(providers_file, system_prompt, provider_url, model_name)
-    agent = MBPPAgent(
-                task_id=str(task.task_id), benchmark="mbpp",
-                system_prompt=system_prompt, output_path=output,
-                task_definition=task.task_definition,
-                function_definition=task.function_definition,
-                llmapi=llmapi
-    )
-    return agent
-
-import sys
-import traceback
-import fire
-
-
-def main(*args: str, **kwargs: Any) -> None:
-    agent = create_mbpp_agent(**kwargs)
-
-if __name__ == "__main__":
-    try:
-        fire.Fire(main)
-    except Exception:
-        print(traceback.format_exc())
 

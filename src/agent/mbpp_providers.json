@@ -8,5 +8,11 @@
 		"name": "openrouter", "models": ["thinkingmachines/inkling:free"],
 		"url": "https://openrouter.ai/api/v1",
 		"api_key": "OPENROUTER_API_KEY"
+	},
+	{
+		"name": "mistral", "models": ["codestrall", "trucstrall"],
+		"url": "mistall url",
+		"api_key": "MISTRAL_API_KEY"
 	}
+
 ]
