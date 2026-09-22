@@ -63,9 +63,9 @@ class McpToolsCore(BaseModel):
             ) -> Response | None:
                 if isinstance(msg, Generator):
                     for elem in msg:
-                        print(elem, file=self.io_output)
+                        print(elem, file=self.io_output, flush=True)
                 else:
-                    print(msg, file=self.io_output)
+                    print(msg, file=self.io_output, flush=True)
                 return None
 
             def response_error(
@@ -73,15 +73,20 @@ class McpToolsCore(BaseModel):
             ) -> Response | None:
                 if isinstance(msg, Generator):
                     for elem in msg:
-                        print(msg, file=self.io_output)
+                        print(msg, file=self.io_output, flush=True)
                 else:
-                    print(msg, file=self.io_output)
+                    print(msg, file=self.io_output, flush=True)
                 return None
 
         self.response = response
         self.response_error = response_error
 
         return self
+
+    def event(self, msg: str) -> str:
+        if self.out_format == "http":
+            return f"data: {msg}\n\n"
+        return msg
 
     def message(self, infos: dict[str, Any]) -> str:
         base = {"jsonrpc": "2.0"}
@@ -182,11 +187,11 @@ class McpToolsCore(BaseModel):
                 self.queue_mutex.acquire()
                 rep = self.queue.pop(tid)
                 self.queue_mutex.release()
-                yield rep
+                yield self.event(rep)
                 break
             if notif_msg and start + 5 <= time.time():
                 start = time.time()
-                yield notif_msg
+                yield self.event(notif_msg)
 
 
 class RequestJson(BaseModel):

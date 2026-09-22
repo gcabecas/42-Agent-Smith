@@ -1,0 +1,9 @@
+{"jsonrpc": "2.0", "id": 0, "result": {"resultType": "complete", "ttlMs": 86400000, "cacheScope": "private", "tools": [
+  {"name": "run_tests",
+   "description": "Run a candidate solution against the given test assertions. Returns a JSON string with a 'success' boolean (whether all assertions passed) and an 'output' field (stdout, stderr and traceback of the run).",
+   "inputSchema": {"type": "object",
+     "properties": {
+       "code": {"type": "string", "description": "Python source code of the candidate solution."},
+       "test_list": {"type": "array", "items": {"type": "string"}, "description": "Test assertions to run against the solution, one Python statement per entry."}},
+     "required": ["code", "test_list"]}}
+]}}
