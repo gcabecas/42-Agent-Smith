@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 from flask import Flask, request, Response
@@ -14,6 +15,10 @@ from src.mcp_server.mcp_tools_core import (
 def launch_server(
     type_tools: str, mode: str = "", host: str = "0.0.0.0", port: int = 8042
 ) -> Flask:
+
+    testbed = os.environ.get("TESTBED_PATH")
+    if testbed:
+        os.chdir(testbed)
 
     if mode == "stdio":
         out_format = "stdio"
