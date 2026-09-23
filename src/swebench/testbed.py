@@ -77,10 +77,15 @@ class DockerTestbed:
         return result.exit_code, output
 
     def copy_in(self) -> None:
+        def container_owner(entry: tarfile.TarInfo) -> tarfile.TarInfo:
+            entry.uid = entry.gid = 0
+            entry.uname = entry.gname = "root"
+            return entry
+
         archive = io.BytesIO()
         with tarfile.open(fileobj=archive, mode="w") as tar:
             for source in SERVER_SOURCES:
-                tar.add(source, arcname=source)
+                tar.add(source, arcname=source, filter=container_owner)
 
         self.exec(["mkdir", "-p", self.server_dir], workdir="/")
         self.container.put_archive(self.server_dir, archive.getvalue())
