@@ -410,7 +410,8 @@ class SWETools(McpToolsCore):
             result = subprocess.run(
                 ["/bin/bash", os.environ.get("EVAL_SCRIPT", "/eval.sh")],
                 cwd=workdir,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
             )
             read = result.stdout + result.stderr
@@ -444,9 +445,9 @@ class SWETools(McpToolsCore):
             result = subprocess.run(
                 shlex.split(command),
                 cwd=workdir,
-                capture_output=True,
-                text=True,
-                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
             )
             read = str(result.stdout)
         except Exception as e:

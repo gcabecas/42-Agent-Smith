@@ -50,7 +50,7 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
         mbpp_data = json.load(file)
     task = NewMBPPTaskInput(data=mbpp_data).data
 
-    system_prompt, user_prompt = BasePrompts.get_first_prompts(task.test_imports, task.test_list)
+    system_prompt, user_prompt = BasePrompts.get_first_prompts(task.function_definition, task.task_definition, task.test_imports, task.test_list)
     llmapi = LlmApi(providers_file, provider_url, model_name)
     prompt=MemoryPrompt(system_prompt, user_prompt)
     
@@ -77,6 +77,7 @@ def main(*args: Any, **kwargs: Any) -> None:
         check = True
         while check:
             check = agent.next_step()
+        agent.create_output()
     except Exception:
         print(traceback.format_exc())
     finally:

@@ -5,7 +5,8 @@ from typing import Optional
 import subprocess
 
 from datetime import datetime
-from helpers import LlmApi, MemoryPrompt, Log
+from helpers import LlmApi, BasePrompts, MemoryPrompt, Log
+
 
 class StepMetrics(BaseModel):
     """Metrics for a single agent step.
@@ -25,21 +26,6 @@ class StepMetrics(BaseModel):
     sandbox_input: str = Field(default="", description="Python code sent to the sandbox for execution")
     sandbox_output: str = Field(default="", description="Sandbox execution result (stdout/stderr/error message)")
     retries: int = Field(default=0, description="Number of LLM API retries before getting a successful response (0 = first attempt succeeded)")
-
-{
-    "steps": [
-        {
-            "step": 1,
-            "llm_output": "I'll read the file to understand the module.\n```python\nresult = read_file(filepath=\"/testbed/src/module.py\")\n```",
-            "sandbox_input": "result = read_file(filepath=\"/testbed/src/module.py\")",
-            "sandbox_output": "def solve(x):\n return x + 1\n...",
-            "retries": 0,
-            "input_tokens": 1234,
-            "output_tokens": 567,
-            "...": "..."
-        }
-    ]
-}
 
 
 class SolutionOutput(BaseModel):
@@ -74,6 +60,8 @@ class Agent(SolutionOutput):
     llmapi: LlmApi
     prompt: MemoryPrompt
     exec_result: str = ""
+    init: bool = False
+    start: datetime = datetime.now()
    
     def create_prompt(self) -> str:
         if self.exec_result:
@@ -89,21 +77,30 @@ class Agent(SolutionOutput):
 
         new = StepMetrics(step=len(self.steps) + 1)
         self.steps.append(new)
-        self.prompt.add_message(prompt)
+        if self.init:
+            self.prompt.add_message(prompt)
+        else:
+            self.init = True
         resp = self.llmapi.response(self.prompt.messages)
+        self.prompt.add_message(resp["llm_output"], "assistant")
         code = self.prompt.get_message_code(self.llmapi.get_current())
 
         self.exec_result = ""
         if code:
-            command = ["uv", "run", "sandbox;", code]  # TODO use arguments in a json file
+            # TODO use arguments in a json file
+            command = ["uv", "run", "sandbox", "--mcp-stdio", "uv", "run", "python", "mcp_tools_swebench.py ;", "code"]
             result = subprocess.run(
                 command,
                 cwd=".",
-                capture_output=True,
-                text=True,
-                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
             )
             read = str(result.stdout)
+            if result.returncode == 42:
+                self.solution = read.split("<FinalAnswerExit>")[-1]
+                return False
+                
             self.exec_result = read
             new.sandbox_input = code
             new.sandbox_output = read
@@ -111,16 +108,51 @@ class Agent(SolutionOutput):
         new.llm_output = resp["llm_output"]
         new.input_tokens = resp["input_tokens"]
         new.output_tokens = resp["output_tokens"]
+        new.api_url = resp["api_url"]
         new.model_name = resp["model_name"]
         new.retries = resp["retries"]
         self.total_input_tokens += resp["input_tokens"]
         self.total_output_tokens += resp["output_tokens"]
-        new.request_time_ms = datetime.now() - start
+        time = datetime.now() - start
+        new.request_time_ms = time.total_seconds() * 1000
 
         print("[ STEP FINISHED ]------------------", file=sys.stderr) 
         for key, elem in new.__dict__.items():
             print(f"{key}|=|{elem}", file=sys.stderr)
+        print("[ PROMPT: ]")
+        for elem in self.prompt.messages:
+            print(elem)
         return False
+
+    def create_output(self) -> None:
+
+        time = datetime.now() - self.start
+        total_time = time.total_seconds() * 1000
+        output = SolutionOutput(
+
+    task_id=self.task_id,
+    benchmark=self.benchmark,
+
+    success=self.success,
+    solution=self.solution,
+    iterations=self.iterations,
+    total_requests=self.total_requests,
+
+    total_input_tokens=self.total_input_tokens,
+    total_output_tokens=self.total_output_tokens,
+
+    total_time_seconds=total_time,
+    steps=self.steps,
+    system_prompt=self.system_prompt,
+    error=self.error,
+    timestamp=self.timestamp
+        )
+        try:
+            with open(self.output_path, "a") as f_open:
+                f_open.write(output.model_dump_json(indent=2))
+        except Exception as e:
+            raise ValueError(f"can't write file {self.output_path}: {e}")
+
 
 
 """ SWE

@@ -3,6 +3,7 @@ from openai import OpenAI
 import os
 import sys
 import json
+import subprocess
 from dotenv import load_dotenv
 
 
@@ -121,6 +122,7 @@ class LlmApi:
                         "llm_output": response.choices[0].message.content,
                         "input_tokens": response.usage.prompt_tokens,
                         "output_tokens": response.usage.completion_tokens,
+                        "api_url": self.urls[self.iurl]["url"],
                         "model_name": self.get_current(),
                         "retries": retries
                 }
@@ -156,39 +158,47 @@ class MemoryError(Exception):
 class BasePrompts:
 
     @classmethod
-    def get_first_prompts(cls, test_imports: list[str], test_list: list[str]) -> tuple[str, str]:
+    def get_first_prompts(cls, function_definition: str, task_definition: str, test_imports: list[str],
+                                test_list: list[str]) -> tuple[str, str]:
         system_prompt = (
                 "You are a python coding agent "
                 "specialised to resolve MBPP problems. "
-                "Create the function demanded by user with the associed requirements. "
-                "You are fully automated, all the code you give is used in a sandbox and the output is returned by the user. "
-                "Inside the sandbox you have access to mcp-tools functions for special(s) requirement(s) and need(s).\n"
-                "If you success end the resolving by using the following function with the code as argument: "
-                "final_answer(msg: str) -> None\n"
-                "For more you have two specials functions to manage your problem research and flaw tracking:\n"
-                "set_new_objective(self, msg: str, old_objective_status: str) -> None"
-                "add_main_objective_hint(msg: str) -> None\n"
-                "add_current_objective_hint(msg: str) -> None\n"
         )
         user_prompt = (
-                    "<MAIN_OBJECTIVE>\n"
-                    f"You need to create a python fonction named: {task.task_definition}\n"
+                "We need to resolve Mostly Basic Python Problems. "
+                "Create the function demanded by with the associed requirements all in python. "
+                "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned to you. "
+                "The code you give is executed inside the sandbox where you have access to mcp-tools functions for specials  needs.\n"
+                "If you success end the resolving by using the following function with the code as argument: "
+                "final_answer(msg: str) -> None\n"
+                "For more you have important specials functions to manage your problem research and flaw tracking:\n"
+                "set_new_current_objective(self, msg: str, old_objective_status: str) -> None"
+                "add_main_objective_hint(msg: str) -> None\n"
+                "add_current_objective_hint(msg: str) -> None\n"
+                "Theses functions have automated XML management\n"
         )
-        if task.test_imports:
-            user_prompt += "Premade imports of the environement are: {task.test_imports}\n"
-        if task.test_list:
-            user_prompt += "Python assertion(s) need to pass: {task.test_list}\n"
+        user_prompt += (
+                    "<MAIN_OBJECTIVE>\n"
+                    f"You need to create a python function, "
+                    "describe one only python code bloc i will execute in my sandbox as: ```python<CODE>```\n"
+                    f"Description: {task_definition}\n"
+                    f"Function definition: {function_definition}"
+        )
+#        if test_imports:  # TODO imports are a tet to do after code ???
+#            user_prompt += "Premade imports of the environement are: {test_imports}\n"
+        if test_list:
+            user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
 
-        command = ["uv", "run", "sandbox;"]  # TODO
+        command = ["uv", "run", "sandbox", "--manual", "--mcp-stdio", "uv", "run", "python", "mcp_tools_swebench.py"]
         result = subprocess.run(
             command,
             cwd=".",
             capture_output=True,
             text=True,
-            check=True,
         )
         user_prompt += str(result.stdout) + "\n"
         user_prompt += "</MAIN_OBJECTIVE>\n"
+        user_prompt += f"<CURRENT_OBJECTIVE>{BasePrompts.get_first_objective()}</CURRENT_OBJECTIVE>"
         return (system_prompt, user_prompt)
 
     @classmethod
@@ -201,20 +211,25 @@ class BasePrompts:
         out = "Now you thought about the problem, use code and eventually tools to continue the searches\n"
         return out
 
+    @classmethod
+    def get_first_objective(cls) -> str:
+        out = "Find a new current objective or resolve the main one directly"
+        return out
+    
 
 class MemoryPrompt:
 
     def __init__(self, base_prompt_system: str, base_prompt_user: str) -> None:
         self.max = 0
         self.true_max = 0
+        self.current_objective = BasePrompts.get_first_objective()
 
         # tuples of (pos in messages, pos first car in message)
         self.main_hints: list[tuple[int, int]] = []
         self.current_hints: list[tuple[int, int]] = []
 
         self.messages = [{"role": "system", "content": base_prompt_system}]
-        msg = f"<CURRENT_OBJECTIVE>\n{base_prompt_user}\n</CURRENT_OBJECTIVE>\n"
-        self.messages.append({"role": "user", "content": msg})
+        self.messages.append({"role": "user", "content": base_prompt_user})
         self.base_len = 2
 
     # Spceial Method usable by the llm
@@ -236,10 +251,11 @@ class MemoryPrompt:
         message["content"] += f"\n<CURRENT_HINT>{msg}</CURRENT_HINT>"
 
     # Spceial Method usable by the llm
-    def set_new_objective(self, msg: str, old_objective_status: str) -> None:
-        # TODO
-        self.add_main_objective_hint(self, "")
-        pass
+    def set_new_current_objective(self, msg: str, old_objective_status: str) -> None:
+
+        main_hint = f"{self.current_objective}<STATUS:>{old_objective_status}"
+        self.add_main_objective_hint(main_hint)
+        self.current_objective = msg
 
     # if len(all_memory) > self.max + len(important_memory) ...
     # if len(all_memory) > self.true_max ...
@@ -250,17 +266,26 @@ class MemoryPrompt:
     def get_messages(self) -> list[dict[str, str]]:
         return self.messages
 
-    def add_message(self, msg: str) -> None:
-        self.messages.append({"role": "user", "content": msg})
+    def add_message(self, msg: str, role: str = "user") -> None:
+        self.messages.append({"role": role, "content": msg})
 
     def get_message_code(self, model: str) -> str:
         # TODO
+
+        out = ""
+        message = self.messages[-1]
+        if message["role"] != "assistant":
+            raise MemoryError("last message not from assistant, can't extract code")
+        data = message["content"]
         match model:
-            case "":
+            case "test":
                 pass
-            case "":
+            case "test2":
                 pass
             case _:
-                pass
-        return ""
+                try:
+                    out = data.split("```python", 1)[1].split("```", 1)[0]
+                except Exception:
+                    pass
+        return out
 
