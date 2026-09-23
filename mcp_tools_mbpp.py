@@ -7,4 +7,4 @@ port = int(os.environ.get("MCP_PORT", "8042"))
 default_mode = "stdio" if __name__ == "__main__" else "http"
 mode = os.environ.get("MCP_MODE", default_mode)
 
-app = launch_server("SWE", mode, host, port)
+app = launch_server("MBPP", mode, host, port)

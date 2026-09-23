@@ -19,7 +19,7 @@ from src.sandbox.security.network import block_network
 MAX_OUTPUT_CHARS = 10_000
 
 
-def _call_tool(name: str, pipe: Connection,
+def _call_tool(name: str, pipe: Connection, /,
                *args: Any, **kwargs: Any) -> Any:
     pipe.send(("tool_call", (name, args, kwargs)))
     ok, payload = pipe.recv()

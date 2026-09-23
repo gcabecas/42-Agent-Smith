@@ -408,13 +408,12 @@ class SWETools(McpToolsCore):
         read = ""
         try:
             result = subprocess.run(
-                "./test_dir/test.sh",  # PLACEHOLDER SCRIPT TODO -!-!-!-!-!-!-!-!-!-!-!
+                ["/bin/bash", os.environ.get("EVAL_SCRIPT", "/eval.sh")],
                 cwd=workdir,
                 capture_output=True,
                 text=True,
-                check=True,
             )
-            read = str(result.stdout)
+            read = result.stdout + result.stderr
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True)
             return

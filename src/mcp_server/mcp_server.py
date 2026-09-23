@@ -1,8 +1,10 @@
+import os
 import sys
 import json
 from flask import Flask, request, Response
 
 from src.mcp_server.mcp_swebench_core import SWETools
+from src.mcp_server.mcp_mbpp_core import MBPPTools
 from src.mcp_server.mcp_tools_core import (
     CheckRequestJson,
     CheckRequestParamsList,
@@ -14,6 +16,10 @@ def launch_server(
     type_tools: str, mode: str = "", host: str = "0.0.0.0", port: int = 8042
 ) -> Flask:
 
+    testbed = os.environ.get("TESTBED_PATH")
+    if testbed:
+        os.chdir(testbed)
+
     if mode == "stdio":
         out_format = "stdio"
         in_format = "stdio"
@@ -24,8 +30,7 @@ def launch_server(
     if type_tools == "SWE":
         tools = SWETools(out_format=out_format, in_format=in_format)
     elif type_tools == "MBPP":
-        # tools = MBPPTools(out_format="http", in_format="http")
-        pass
+        tools = MBPPTools(out_format=out_format, in_format=in_format)
     else:
         raise RuntimeError(
             "Cannot load SWETools or MBPPTools, missing class/module"
@@ -79,6 +84,8 @@ server/discover :
 
         if mode == "stdio":
             input_data = tools.io_input.readline()
+            if not input_data:
+                sys.exit(0)
         else:
             headers = {
                 "MCP-Protocol-Version": request.headers.get(

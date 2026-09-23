@@ -1,4 +1,5 @@
 import asyncio
+import os
 import shlex
 from functools import partial
 from typing import Any, Callable
@@ -15,7 +16,8 @@ def _server(command: str | None, url: str | None) -> Any:
     if url:
         return url
     program, *args = shlex.split(command or "")
-    return StdioServerParameters(command=program, args=args)
+    return StdioServerParameters(command=program, args=args,
+                                 env=dict(os.environ))
 
 
 class McpClient:
@@ -52,16 +54,16 @@ class McpClient:
         except BaseException as e:
             raise _unwrap(e) from None
 
-    def read_resource(self, uri: str) -> str:
+    def read_resource(self, uri: str, /) -> str:
         result = self._run(lambda client: client.read_resource(uri))
         return "\n".join(c.text for c in result.contents if hasattr(c, "text"))
 
-    def get_prompt(self, name: str, **arguments: str) -> str:
+    def get_prompt(self, name: str, /, **arguments: str) -> str:
         result = self._run(lambda client: client.get_prompt(name, arguments))
         return "\n".join(m.content.text for m in result.messages
                          if hasattr(m.content, "text"))
 
-    def call(self, name: str, params: list[str],
+    def call(self, name: str, params: list[str], /,
              *args: Any, **kwargs: Any) -> str:
         arguments = dict(zip(params, args)) | kwargs
         result = self._run(lambda client: client.call_tool(name, arguments))

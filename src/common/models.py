@@ -22,3 +22,17 @@ class SandboxConfig(BaseModel):
     ])
     max_execution_time_seconds: int = 30
     max_memory_mb: int = 512
+
+
+class SWEBenchTaskInput(BaseModel):
+    """Input for a SWE-bench task, provided by the moulinette.
+
+    Your agent receives this and must produce a git patch that fixes
+    the issue.
+    """
+    instance_id: str
+    problem_statement: str
+    docker_image: str
+    eval_script: str
+    hints_text: str = ""
+    repo: str = ""
