@@ -16,7 +16,8 @@ dependencies = [
     "GitPython",
     "jedi",
 	"OpenAI",
-	"Fire"
+	"Fire",
+	"dotenv"
 ]
 
 [project.scripts]

@@ -10,9 +10,8 @@
 		"api_key": "OPENROUTER_API_KEY"
 	},
 	{
-		"name": "mistral", "models": ["codestrall", "trucstrall"],
-		"url": "mistall url",
+		"name": "mistral", "models": ["zai-glm-5-3", "mistral-medium-3-5", "codestral-2508"],
+		"url": "https://api.mistral.ai/v1",
 		"api_key": "MISTRAL_API_KEY"
 	}
-
 ]

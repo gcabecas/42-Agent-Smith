@@ -1,7 +1,9 @@
 
 from openai import OpenAI
 import os
+import sys
 import json
+from dotenv import load_dotenv
 
 
 class Log:
@@ -57,6 +59,7 @@ class LlmApi:
     def __init__(self, providers_file: str, baseurl: str = "", basemodel: str = "") -> None:
         self.iurl = -1
         self.imodel = -1
+        load_dotenv()
         try:
             with open(providers_file, "r") as f_open:
                 self.urls = json.load(f_open)
@@ -100,7 +103,7 @@ class LlmApi:
             self.iurl = len(self.urls) - 1
             self.imodel = len(self.urls[self.iurl]["models"]) - 1
 
-    def response(self, msg: list[dict[str, str | int]], tokens: int) -> dict[str, str | int]:
+    def response(self, msg: list[dict[str, str | int]]) -> dict[str, str | int]:
 
         retries = 0
         while 1:
@@ -110,15 +113,14 @@ class LlmApi:
                     "messages": [
                         {"role": "system", "content": "you are an ia"},
                         {"role": "user", "content": "do code"}
-                    ],
-                    "max_tokens": tokens
+                    ]
                 }
 
                 response = self.urls[self.iurl]["client"].chat.completions.create(**params)
                 return {
                         "llm_output": response.choices[0].message.content,
                         "input_tokens": response.usage.prompt_tokens,
-                        "output_tokens" response.usage.completion_tokens,
+                        "output_tokens": response.usage.completion_tokens,
                         "model_name": self.get_current(),
                         "retries": retries
                 }
@@ -130,7 +132,7 @@ class LlmApi:
                         f"|{usr['models'][self.imodel]}: {e}"
                 )
                 Log.add_logs(msg)
-                print(msg, file=sys.stderr)
+                print("response error; ", msg, file=sys.stderr)
                 self.next()
                 # time.sleep(0.1)
         return dict()
@@ -151,19 +153,67 @@ class LlmApi:
 class MemoryError(Exception):
     pass
 
+class BasePrompts:
+
+    @classmethod
+    def get_first_prompts(cls, test_imports: list[str], test_list: list[str]) -> tuple[str, str]:
+        system_prompt = (
+                "You are a python coding agent "
+                "specialised to resolve MBPP problems. "
+                "Create the function demanded by user with the associed requirements. "
+                "You are fully automated, all the code you give is used in a sandbox and the output is returned by the user. "
+                "Inside the sandbox you have access to mcp-tools functions for special(s) requirement(s) and need(s).\n"
+                "If you success end the resolving by using the following function with the code as argument: "
+                "final_answer(msg: str) -> None\n"
+                "For more you have two specials functions to manage your problem research and flaw tracking:\n"
+                "set_new_objective(self, msg: str, old_objective_status: str) -> None"
+                "add_main_objective_hint(msg: str) -> None\n"
+                "add_current_objective_hint(msg: str) -> None\n"
+        )
+        user_prompt = (
+                    "<MAIN_OBJECTIVE>\n"
+                    f"You need to create a python fonction named: {task.task_definition}\n"
+        )
+        if task.test_imports:
+            user_prompt += "Premade imports of the environement are: {task.test_imports}\n"
+        if task.test_list:
+            user_prompt += "Python assertion(s) need to pass: {task.test_list}\n"
+
+        command = ["uv", "run", "sandbox;"]  # TODO
+        result = subprocess.run(
+            command,
+            cwd=".",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        user_prompt += str(result.stdout) + "\n"
+        user_prompt += "</MAIN_OBJECTIVE>\n"
+        return (system_prompt, user_prompt)
+
+    @classmethod
+    def get_aftercode_prompt(cls, sandbox_output: str) -> str:
+        out = f"{sandbox_output}\n"
+        return out
+
+    @classmethod
+    def get_nocode_prompt(cls) -> str:
+        out = "Now you thought about the problem, use code and eventually tools to continue the searches\n"
+        return out
+
 
 class MemoryPrompt:
 
     def __init__(self, base_prompt_system: str, base_prompt_user: str) -> None:
-        self.max
-        self.true_max
+        self.max = 0
+        self.true_max = 0
 
         # tuples of (pos in messages, pos first car in message)
         self.main_hints: list[tuple[int, int]] = []
         self.current_hints: list[tuple[int, int]] = []
 
         self.messages = [{"role": "system", "content": base_prompt_system}]
-        msg = f"<CURRENT_OBJECTIVE>\n{base_prompt_user}\n<CURRENT_OBJECTIVE>\n"
+        msg = f"<CURRENT_OBJECTIVE>\n{base_prompt_user}\n</CURRENT_OBJECTIVE>\n"
         self.messages.append({"role": "user", "content": msg})
         self.base_len = 2
 
@@ -212,4 +262,5 @@ class MemoryPrompt:
                 pass
             case _:
                 pass
+        return ""
 

@@ -1,6 +1,6 @@
 
 from typing import Any
-from helpers import Log, LlmApi, MemoryPrompt
+from helpers import Log, LlmApi, BasePrompts,  MemoryPrompt
 from agent import Agent
 import json
 
@@ -50,10 +50,8 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
         mbpp_data = json.load(file)
     task = NewMBPPTaskInput(data=mbpp_data).data
 
-    system_prompt = "You are a python coding agent, you need to fix the user code problem(s), you can use available tools or response with Python code"
-    user_prompt = f"You need to responde to the task {task}"
-
-    llmapi = LlmApi(providers_file, system_prompt, provider_url, model_name)
+    system_prompt, user_prompt = BasePrompts.get_first_prompts(task.test_imports, task.test_list)
+    llmapi = LlmApi(providers_file, provider_url, model_name)
     prompt=MemoryPrompt(system_prompt, user_prompt)
     
     agent = MBPPAgent(
@@ -61,9 +59,8 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
                 system_prompt=system_prompt, output_path=output,
                 task_definition=task.task_definition,
                 function_definition=task.function_definition,
-                test_imports=task.test_imports
-                test_list=task.test_list
-
+                test_imports=task.test_imports,
+                test_list=task.test_list,
                 llmapi=llmapi,
                 prompt=prompt
     )

@@ -5,7 +5,7 @@ from typing import Optional
 import subprocess
 
 from datetime import datetime
-from helpers import LlmApi, Log
+from helpers import LlmApi, MemoryPrompt, Log
 
 class StepMetrics(BaseModel):
     """Metrics for a single agent step.
@@ -72,37 +72,41 @@ class Agent(SolutionOutput):
     output_path: str = Field(pattern=r".*\.json$")
 
     llmapi: LlmApi
-    prompt: list[dict[str, str | int]]
+    prompt: MemoryPrompt
     exec_result: str = ""
    
-    def create_prompt() -> None
+    def create_prompt(self) -> str:
         if self.exec_result:
-            pass
+            out = BasePrompts.get_aftercode_prompt(self.exec_result)
         else:
-            pass
+            out = BasePrompts.get_nocode_prompt()
+        return out
 
     def next_step(self) -> bool:
-    
-        prompt = create_prompt() # TODO
+   
+        start = datetime.now()
+        prompt = self.create_prompt()
 
         new = StepMetrics(step=len(self.steps) + 1)
         self.steps.append(new)
         self.prompt.add_message(prompt)
         resp = self.llmapi.response(self.prompt.messages)
-        code = prompt.get_message_code(self.llmapi.get_current())
+        code = self.prompt.get_message_code(self.llmapi.get_current())
 
         self.exec_result = ""
         if code:
-            command = ["uv", "run", "sandbox;", code]
+            command = ["uv", "run", "sandbox;", code]  # TODO use arguments in a json file
             result = subprocess.run(
                 command,
-                cwd=workdir,
+                cwd=".",
                 capture_output=True,
                 text=True,
                 check=True,
             )
             read = str(result.stdout)
             self.exec_result = read
+            new.sandbox_input = code
+            new.sandbox_output = read
 
         new.llm_output = resp["llm_output"]
         new.input_tokens = resp["input_tokens"]
@@ -111,9 +115,12 @@ class Agent(SolutionOutput):
         new.retries = resp["retries"]
         self.total_input_tokens += resp["input_tokens"]
         self.total_output_tokens += resp["output_tokens"]
+        new.request_time_ms = datetime.now() - start
 
+        print("[ STEP FINISHED ]------------------", file=sys.stderr) 
+        for key, elem in new.__dict__.items():
+            print(f"{key}|=|{elem}", file=sys.stderr)
         return False
-
 
 
 """ SWE
