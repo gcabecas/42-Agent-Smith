@@ -1,5 +1,4 @@
 from typing import Any
-import sys
 
 
 class FinalAnswer(Exception):
@@ -8,5 +7,4 @@ class FinalAnswer(Exception):
 
 
 def final_answer(value: Any) -> None:
-    print(f"<FinalAnswerExit>{value}", file=sys.stderr)
-    sys.exit(42)
+    raise FinalAnswer(value)

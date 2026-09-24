@@ -3,9 +3,9 @@ from pydantic import BaseModel, Field
 import sys
 from typing import Optional
 import subprocess
-
 from datetime import datetime
-from helpers import LlmApi, BasePrompts, MemoryPrompt, Log
+
+from src.agent.helpers import LlmApi, BasePrompts, MemoryPrompt, Log
 
 
 class StepMetrics(BaseModel):
@@ -62,6 +62,7 @@ class Agent(SolutionOutput):
     exec_result: str = ""
     init: bool = False
     start: datetime = datetime.now()
+    imports: str = ""
    
     def create_prompt(self) -> str:
         if self.exec_result:
@@ -83,12 +84,13 @@ class Agent(SolutionOutput):
             self.init = True
         resp = self.llmapi.response(self.prompt.messages)
         self.prompt.add_message(resp["llm_output"], "assistant")
-        code = self.prompt.get_message_code(self.llmapi.get_current())
+        codes = self.prompt.get_message_codes(self.llmapi.get_current())
 
         self.exec_result = ""
-        if code:
+        out = []
+        for i, code in enumerate(codes):
             # TODO use arguments in a json file
-            command = ["uv", "run", "sandbox", "--mcp-stdio", "uv", "run", "python", "mcp_tools_swebench.py ;", "code"]
+            command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py ;", f"{self.imports}\n{code}\nexit"]
             result = subprocess.run(
                 command,
                 cwd=".",
@@ -96,14 +98,20 @@ class Agent(SolutionOutput):
                 stderr=subprocess.STDOUT,
                 text=True
             )
-            read = str(result.stdout)
-            if result.returncode == 42:
-                self.solution = read.split("<FinalAnswerExit>")[-1]
+            read = str(result.stdout).rpartition("\n")[0]
+            out.append(read)
+            new.sandbox_input += f"[{i}]\n{code}\n"
+            new.sandbox_output += f"[{i}]\n{read}\n"
+
+            if read.endswith("[final_answer]"):
+                self.solution = read.split("[final_answer]")[1]
                 return False
-                
-            self.exec_result = read
-            new.sandbox_input = code
-            new.sandbox_output = read
+
+        if len(out) == 1:
+            self.exec_result += out[0]
+        else:
+            for i, o in enumerate(out):
+                self.exec_result += f"[{i}]\n{o}\n"
 
         new.llm_output = resp["llm_output"]
         new.input_tokens = resp["input_tokens"]
@@ -134,7 +142,6 @@ class Agent(SolutionOutput):
     benchmark=self.benchmark,
 
     success=self.success,
-    solution=self.solution,
     iterations=self.iterations,
     total_requests=self.total_requests,
 
@@ -147,6 +154,9 @@ class Agent(SolutionOutput):
     error=self.error,
     timestamp=self.timestamp
         )
+
+        output.success = self.check_solution()
+
         try:
             with open(self.output_path, "a") as f_open:
                 f_open.write(output.model_dump_json(indent=2))

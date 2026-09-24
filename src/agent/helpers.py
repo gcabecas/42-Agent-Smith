@@ -5,6 +5,7 @@ import sys
 import json
 import subprocess
 from dotenv import load_dotenv
+import re
 
 
 class Log:
@@ -60,6 +61,7 @@ class LlmApi:
     def __init__(self, providers_file: str, baseurl: str = "", basemodel: str = "") -> None:
         self.iurl = -1
         self.imodel = -1
+        self.requests = 0
         load_dotenv()
         try:
             with open(providers_file, "r") as f_open:
@@ -111,12 +113,10 @@ class LlmApi:
             try:
                 params = { # temp for msg TODO
                     "model": self.urls[self.iurl]["models"][self.imodel],
-                    "messages": [
-                        {"role": "system", "content": "you are an ia"},
-                        {"role": "user", "content": "do code"}
-                    ]
+                    "messages": msg
                 }
-
+                
+                self.requests += 1
                 response = self.urls[self.iurl]["client"].chat.completions.create(**params)
                 return {
                         "llm_output": response.choices[0].message.content,
@@ -163,21 +163,19 @@ class BasePrompts:
         system_prompt = (
                 "You are a python coding agent "
                 "specialised to resolve MBPP problems. "
-        )
-        user_prompt = (
-                "We need to resolve Mostly Basic Python Problems. "
-                "Create the function demanded by with the associed requirements all in python. "
+                "You need to resolve Mostly Basic Python Problems. "
+                "Create the function demanded by the user with the associed requirements all in python. "
                 "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned to you. "
-                "The code you give is executed inside the sandbox where you have access to mcp-tools functions for specials  needs.\n"
+                "Code executed in the sandbox have access to MCP-Tools functions for specials needs.\n"
                 "If you success end the resolving by using the following function with the code as argument: "
                 "final_answer(msg: str) -> None\n"
-                "For more you have important specials functions to manage your problem research and flaw tracking:\n"
+                "For more you have important specials functions to manage your memory, helping for problem researchs and flaw tracking:\n"
                 "set_new_current_objective(self, msg: str, old_objective_status: str) -> None"
                 "add_main_objective_hint(msg: str) -> None\n"
                 "add_current_objective_hint(msg: str) -> None\n"
                 "Theses functions have automated XML management\n"
         )
-        user_prompt += (
+        user_prompt = (
                     "<MAIN_OBJECTIVE>\n"
                     f"You need to create a python function, "
                     "describe one only python code bloc i will execute in my sandbox as: ```python<CODE>```\n"
@@ -189,7 +187,7 @@ class BasePrompts:
         if test_list:
             user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
 
-        command = ["uv", "run", "sandbox", "--manual", "--mcp-stdio", "uv", "run", "python", "mcp_tools_swebench.py"]
+        command = ["uv", "run", "sandbox", "--manual", "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
         result = subprocess.run(
             command,
             cwd=".",
@@ -269,10 +267,10 @@ class MemoryPrompt:
     def add_message(self, msg: str, role: str = "user") -> None:
         self.messages.append({"role": role, "content": msg})
 
-    def get_message_code(self, model: str) -> str:
+    def get_message_codes(self, model: str) -> list[str]:
         # TODO
 
-        out = ""
+        out = []
         message = self.messages[-1]
         if message["role"] != "assistant":
             raise MemoryError("last message not from assistant, can't extract code")
@@ -284,7 +282,7 @@ class MemoryPrompt:
                 pass
             case _:
                 try:
-                    out = data.split("```python", 1)[1].split("```", 1)[0]
+                    out = re.findall(r"```python\s*\n(.*?)```", data, flags=re.DOTALL)
                 except Exception:
                     pass
         return out

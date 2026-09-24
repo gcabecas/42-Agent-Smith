@@ -1,10 +1,11 @@
 
 from typing import Any
-from helpers import Log, LlmApi, BasePrompts,  MemoryPrompt
-from agent import Agent
 import json
-
 from pydantic import BaseModel, Field
+import subprocess
+
+from src.agent.agent import Agent
+from src.agent.helpers import Log, LlmApi, BasePrompts,  MemoryPrompt
 
 """ MBPP
 Implement an agent CLI interface
@@ -41,18 +42,41 @@ class MBPPAgent(Agent):
     test_imports: list[str] = Field(default_factory=list)
     test_list: list[str] = Field(default_factory=list)
 
+    def check_solution(self) -> bool:
+
+        asserts = ""
+        for elem in self.test_list:
+            asserts += f"{elem}\n"
+        code = f"{self.imports}\n{self.solution}\n{asserts}exit"
+
+        command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py ;", code]
+        result = subprocess.run(
+            command,
+            cwd=".",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        read = str(result.stdout).rpartition("\n")[0]
+        if "[error]" in read:
+            return False
+        return True
 
 def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
-        providers_file: str = "mbpp_providers.json",
+        providers_file: str = "config/mbpp_providers.json",
         provider_url: str = "", model_name: str = "") -> MBPPAgent:
 
     with open(task_file, "r") as file:
         mbpp_data = json.load(file)
     task = NewMBPPTaskInput(data=mbpp_data).data
 
-    system_prompt, user_prompt = BasePrompts.get_first_prompts(task.function_definition, task.task_definition, task.test_imports, task.test_list)
-    llmapi = LlmApi(providers_file, provider_url, model_name)
+    pr = BasePrompts.get_first_prompts(
+                                    task.function_definition,
+                                    task.task_definition, task.test_imports,
+                                    task.test_list)
+    system_prompt, user_prompt = pr
     prompt=MemoryPrompt(system_prompt, user_prompt)
+    llmapi = LlmApi(providers_file, provider_url, model_name)
     
     agent = MBPPAgent(
                 task_id=str(task.task_id), benchmark="mbpp",
@@ -62,32 +86,19 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
                 test_imports=task.test_imports,
                 test_list=task.test_list,
                 llmapi=llmapi,
-                prompt=prompt
+                prompt=prompt,
+                imports="\n".join(task.test_imports)
     )
     return agent
-
-import sys
-import traceback
-import fire
 
 
 def main(*args: Any, **kwargs: Any) -> None:
     agent = create_mbpp_agent(**kwargs)
-    try:
-        check = True
-        while check:
-            check = agent.next_step()
-        agent.create_output()
-    except Exception:
-        print(traceback.format_exc())
-    finally:
-        pass
+    check = True
+    while check:
+        check = agent.next_step()
+    agent.create_output()
 
-if __name__ == "__main__":
-    try:
-        fire.Fire(main)
-    except Exception:
-        print(traceback.format_exc())
 
 
 
