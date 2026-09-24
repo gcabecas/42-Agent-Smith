@@ -57,7 +57,7 @@ def repl(config: SandboxConfig,
             if status != "ok":
                 print(f"[{status}] {value}")
                 if status == "final_answer":
-                    print(f"[{status}]")
+                    print(f"[{status}] .")
 
 
 def main() -> None:

@@ -167,6 +167,7 @@ class BasePrompts:
                 "Create the function demanded by the user with the associed requirements all in python. "
                 "Only code is important the user will not read your comments.\n"
                 "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
+                "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
                 "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
                 "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
                 "Do not use python code block inside python code block !\n"

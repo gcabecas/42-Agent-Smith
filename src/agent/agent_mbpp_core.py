@@ -41,19 +41,19 @@ class MBPPAgent(Agent):
     test_imports: list[str] = Field(default_factory=list)
     test_list: list[str] = Field(default_factory=list)
 
-    def check_solution(self) -> bool:
+    def check_solution(self) -> tuple[bool, str]:
 
         asserts = ""
         for elem in self.test_list:
-            asserts += f"{elem}\n"
+            asserts += f"\n\n{elem}"
 
         # TODO use arguments in a json file
         command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
-        code = f"{self.imports}\n{self.solution}\n{asserts}"
+        code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
         read = self.sandbox_term(command, code)
         if "[error]" in read:
-            return False
-        return True
+            return (False, read)
+        return (True, "no error")
 
 def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
         providers_file: str = "config/mbpp_providers.json",

@@ -96,16 +96,22 @@ class Agent(SolutionOutput):
 
         result = ""
         term = pexpect.spawn(command[0], command[1:], encoding="utf-8")
+        lines = code.split("\n")
+        while lines and lines[-1].strip() == "":
+            lines.pop()
         try:
             term.setecho(True)
             term.expect_exact([">>> ", "... "])
-            result += term.before + term.after
-            for line in code.split("\n"):
+            result += term.after
+            for line in lines:
                 term.sendline(line)
-                term.expect_exact([">>> ", "... ", "[error] "])
-                new = term.before + term.after
-                result += new
-                if new.startswith("[error]"):
+                term.expect_exact(["\n>>> ", "\n... ", "\n[error] ", "\n[final_answer] ."])
+                result += term.before + term.after
+                if term.after.startswith("\n[error]"):
+                    term.sendline("")
+                    term.expect_exact(["\n>>> ", "\n... "])
+                    result += term.before
+                if term.after.startswith("\n[final_answer] ."):
                     break
             term.sendline("exit")
             term.terminate(force=True)
@@ -113,7 +119,7 @@ class Agent(SolutionOutput):
             raise
         finally:
             term.terminate(force=True)
-        return result
+        return result.replace("\r\n", "\n")
 
     def next_step(self) -> bool:
   
@@ -142,8 +148,8 @@ class Agent(SolutionOutput):
             new.sandbox_input += f"[code block: {i}]\n{code}\n"
             new.sandbox_output += f"[code block: {i}]\n{read}\n"
 
-            if read.rstrip().endswith("[final_answer]\n>>>"):
-                self.solution = read.split("[final_answer]")[1]
+            if read.rstrip().endswith("[final_answer] ."):
+                self.solution = read.split("[final_answer] ")[1]
                 self.set_step_data(new, resp, start)
                 return False
 
@@ -177,11 +183,10 @@ class Agent(SolutionOutput):
     total_time_seconds=total_time,
     steps=self.steps,
     system_prompt=self.system_prompt,
-    error=self.error,
     timestamp=self.timestamp
         )
 
-        output.success = self.check_solution()
+        output.success, output.error = self.check_solution()
 
         try:
             with open(self.output_path, "w") as f_open:
