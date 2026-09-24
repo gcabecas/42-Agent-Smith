@@ -19,7 +19,8 @@ dependencies = [
     "jedi",
 	"OpenAI",
 	"Fire",
-	"dotenv"
+	"dotenv",
+	"pexpect"
 ]
 
 [project.scripts]

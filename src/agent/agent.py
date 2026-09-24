@@ -2,7 +2,7 @@
 from pydantic import BaseModel, Field
 import sys
 from typing import Optional
-import subprocess
+import pexpect
 from datetime import datetime
 
 from src.agent.helpers import LlmApi, BasePrompts, MemoryPrompt, Log
@@ -71,47 +71,7 @@ class Agent(SolutionOutput):
             out = BasePrompts.get_nocode_prompt()
         return out
 
-    def next_step(self) -> bool:
-   
-        start = datetime.now()
-        prompt = self.create_prompt()
-
-        new = StepMetrics(step=len(self.steps) + 1)
-        self.steps.append(new)
-        if self.init:
-            self.prompt.add_message(prompt)
-        else:
-            self.init = True
-        resp = self.llmapi.response(self.prompt.messages)
-        self.prompt.add_message(resp["llm_output"], "assistant")
-        codes = self.prompt.get_message_codes(self.llmapi.get_current())
-
-        self.exec_result = ""
-        out = []
-        for i, code in enumerate(codes):
-            # TODO use arguments in a json file
-            command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py ;", f"{self.imports}\n{code}\nexit"]
-            result = subprocess.run(
-                command,
-                cwd=".",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True
-            )
-            read = str(result.stdout).rpartition("\n")[0]
-            out.append(read)
-            new.sandbox_input += f"[{i}]\n{code}\n"
-            new.sandbox_output += f"[{i}]\n{read}\n"
-
-            if read.endswith("[final_answer]"):
-                self.solution = read.split("[final_answer]")[1]
-                return False
-
-        if len(out) == 1:
-            self.exec_result += out[0]
-        else:
-            for i, o in enumerate(out):
-                self.exec_result += f"[{i}]\n{o}\n"
+    def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
         new.llm_output = resp["llm_output"]
         new.input_tokens = resp["input_tokens"]
@@ -130,20 +90,86 @@ class Agent(SolutionOutput):
         print("[ PROMPT: ]")
         for elem in self.prompt.messages:
             print(elem)
-        return False
+
+    
+    def sandbox_term(self, command: list[str], code: str) -> str:
+
+        result = ""
+        term = pexpect.spawn(command[0], command[1:], encoding="utf-8")
+        try:
+            term.setecho(True)
+            term.expect_exact([">>> ", "... "])
+            result += term.before + term.after
+            for line in code.split("\n"):
+                term.sendline(line)
+                term.expect_exact([">>> ", "... ", "[error] "])
+                new = term.before + term.after
+                result += new
+                if new.startswith("[error]"):
+                    break
+            term.sendline("exit")
+            term.terminate(force=True)
+        except Exception:
+            raise
+        finally:
+            term.terminate(force=True)
+        return result
+
+    def next_step(self) -> bool:
+  
+        self.iterations += 1
+        start = datetime.now()
+        prompt = self.create_prompt()
+
+        new = StepMetrics(step=len(self.steps) + 1)
+        self.steps.append(new)
+        if self.init:
+            self.prompt.add_message(prompt)
+        else:
+            self.init = True
+        resp = self.llmapi.response(self.prompt.messages)
+        self.prompt.add_message(resp["llm_output"], "assistant")
+        codes = self.prompt.get_message_codes(self.llmapi.get_current())
+
+        self.exec_result = ""
+        out = []
+        for i, code in enumerate(codes, 1):
+            # TODO use arguments in a json file
+            command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
+            code = f"{self.imports}\n{code}"
+            read = self.sandbox_term(command, code)
+            out.append(read)
+            new.sandbox_input += f"[code block: {i}]\n{code}\n"
+            new.sandbox_output += f"[code block: {i}]\n{read}\n"
+
+            if read.rstrip().endswith("[final_answer]\n>>>"):
+                self.solution = read.split("[final_answer]")[1]
+                self.set_step_data(new, resp, start)
+                return False
+
+        if len(out) == 1:
+            self.exec_result += out[0]
+        else:
+            for i, o in enumerate(out, 1):
+                self.exec_result += f"[code block: {i}]\n{o}\n"
+
+        self.set_step_data(new, resp, start)
+
+        return True
 
     def create_output(self) -> None:
 
         time = datetime.now() - self.start
-        total_time = time.total_seconds() * 1000
+        total_time = time.total_seconds()
         output = SolutionOutput(
 
     task_id=self.task_id,
     benchmark=self.benchmark,
 
     success=self.success,
+    solution=self.solution,
     iterations=self.iterations,
-    total_requests=self.total_requests,
+    total_requests=self.llmapi.requests,
 
     total_input_tokens=self.total_input_tokens,
     total_output_tokens=self.total_output_tokens,
@@ -158,8 +184,8 @@ class Agent(SolutionOutput):
         output.success = self.check_solution()
 
         try:
-            with open(self.output_path, "a") as f_open:
-                f_open.write(output.model_dump_json(indent=2))
+            with open(self.output_path, "w") as f_open:
+                f_open.write(f"\n{output.model_dump_json(indent=2)}")
         except Exception as e:
             raise ValueError(f"can't write file {self.output_path}: {e}")
 

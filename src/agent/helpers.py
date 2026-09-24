@@ -165,20 +165,22 @@ class BasePrompts:
                 "specialised to resolve MBPP problems. "
                 "You need to resolve Mostly Basic Python Problems. "
                 "Create the function demanded by the user with the associed requirements all in python. "
-                "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned to you. "
-                "Code executed in the sandbox have access to MCP-Tools functions for specials needs.\n"
-                "If you success end the resolving by using the following function with the code as argument: "
-                "final_answer(msg: str) -> None\n"
+                "Only code is important the user will not read your comments.\n"
+                "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
+                "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
+                "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
+                "Do not use python code block inside python code block !\n"
+                "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
+                "```python\nfinal_answer(code: str)\n```\n"
                 "For more you have important specials functions to manage your memory, helping for problem researchs and flaw tracking:\n"
-                "set_new_current_objective(self, msg: str, old_objective_status: str) -> None"
-                "add_main_objective_hint(msg: str) -> None\n"
-                "add_current_objective_hint(msg: str) -> None\n"
+                "```python\nset_new_current_objective(self, msg: str, old_objective_status: str)\n```\n"
+                "```python\nadd_main_objective_hint(msg: str)\n```\n"
+                "```python\nadd_current_objective_hint(msg: str)\n```\n"
                 "Theses functions have automated XML management\n"
         )
         user_prompt = (
                     "<MAIN_OBJECTIVE>\n"
                     f"You need to create a python function, "
-                    "describe one only python code bloc i will execute in my sandbox as: ```python<CODE>```\n"
                     f"Description: {task_definition}\n"
                     f"Function definition: {function_definition}"
         )
@@ -187,6 +189,7 @@ class BasePrompts:
         if test_list:
             user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
 
+        # TODO use good tools
         command = ["uv", "run", "sandbox", "--manual", "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
         result = subprocess.run(
             command,

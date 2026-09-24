@@ -2,7 +2,6 @@
 from typing import Any
 import json
 from pydantic import BaseModel, Field
-import subprocess
 
 from src.agent.agent import Agent
 from src.agent.helpers import Log, LlmApi, BasePrompts,  MemoryPrompt
@@ -47,17 +46,11 @@ class MBPPAgent(Agent):
         asserts = ""
         for elem in self.test_list:
             asserts += f"{elem}\n"
-        code = f"{self.imports}\n{self.solution}\n{asserts}exit"
 
-        command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py ;", code]
-        result = subprocess.run(
-            command,
-            cwd=".",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
-        read = str(result.stdout).rpartition("\n")[0]
+        # TODO use arguments in a json file
+        command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
+        code = f"{self.imports}\n{self.solution}\n{asserts}"
+        read = self.sandbox_term(command, code)
         if "[error]" in read:
             return False
         return True
@@ -87,7 +80,7 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
                 test_list=task.test_list,
                 llmapi=llmapi,
                 prompt=prompt,
-                imports="\n".join(task.test_imports)
+                imports="\n".join(f"import {imp}" for imp in task.test_imports)
     )
     return agent
 

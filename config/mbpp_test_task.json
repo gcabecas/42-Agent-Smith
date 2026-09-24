@@ -1,11 +1,11 @@
 {
     "task_id": 1,
-    "task_definition": "Create a function without argument that returns the time passed since it was last call in int ms",
+    "task_definition": "Create a function without argument that returns the time passed since it was last call in int ms, using the datetime module",
     "function_definition": "count_time",
     "test_imports": [
-		"time"
-	],
+        "datetime"
+    ],
     "test_list": [
-		"def _test():\n    count_time()\n    time.sleep(0.2)\n    assert 200 <= count_time() <= 400\n_test()"
-	]
+        "def _test():\n    count_time()\n    time.sleep(0.2)\n    assert 200 <= count_time() <= 400\n_test()"
+    ]
 }
