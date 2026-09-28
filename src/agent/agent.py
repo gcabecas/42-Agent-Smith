@@ -5,7 +5,7 @@ from typing import Optional
 import pexpect
 from datetime import datetime
 
-from src.agent.helpers import LlmApi, BasePrompts, MemoryPrompt, Log
+from src.agent.helpers import LlmApi, MemoryPrompt
 
 
 class StepMetrics(BaseModel):
@@ -85,13 +85,6 @@ class Agent(SolutionOutput):
     init: bool = False
     start: datetime = datetime.now()
     imports: str = ""
-
-    def create_prompt(self) -> str:
-        if self.exec_result:
-            out = BasePrompts.get_aftercode_prompt(self.exec_result)
-        else:
-            out = BasePrompts.get_nocode_prompt()
-        return out
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -217,45 +210,3 @@ class Agent(SolutionOutput):
                 f_open.write(f"\n{output.model_dump_json(indent=2)}")
         except Exception as e:
             raise ValueError(f"can't write file {self.output_path}: {e}")
-
-
-""" SWE
-Implement an agent CLI interface
-# 1. Dump a task
-cd moulinette
-uv run moulinette_eval dump swebench --output ../cache/swebench_task.json
-# 2. Run your agent
-cd ../student
-uv run python -m agent_swebench --task-file ../cache/swebench_task.json \
---output ../cache/swebench_solution.json \
---model-name "model/name" --provider-url "https://provider.api/v1"
-# 3. Validate solution
-cd ../moulinette
-uv run moulinette_eval validate swebench ../cache/swebench_task.json \
-../cache/swebench_solution.json
-"""
-
-
-class SWEBenchTaskInput(BaseModel):
-    """Input for a SWE-bench task, provided by the moulinette.
-    Your agent receives this and must produce a git patch that fixes
-    the issue.
-    """
-    instance_id: str = Field(
-        ..., description="SWE-bench instance identifier (e.g., 'sympy__sympy-23534')")
-    problem_statement: str = Field(
-        ..., description="The GitHub issue description, what needs to be fixed")
-    docker_image: str = Field(
-        ..., description="Full Docker image name to pull (e.g., 'swebench/sweb.eval.x86_64. sympy_1776_sympy-23534:latest')")
-    eval_script: str = Field(
-        ..., description="Bash script to run inside the container to evaluate the patch")
-    hints_text: str = Field(
-        default="", description="Optional hints about the issue (may be empty)")
-    repo: str = Field(
-        default="", description="Repository name (e.g., 'sympy/sympy')")
-
-
-class SWEAgent(Agent):
-    def __init__(self, taskinput: SWEBenchTaskInput) -> None:
-        pass
-    pass

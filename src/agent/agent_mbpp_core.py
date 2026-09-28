@@ -1,12 +1,12 @@
 
-import sys
-import os
+import subprocess
 from typing import Any
 import json
 from pydantic import BaseModel, Field
 
 from src.agent.agent import Agent
-from src.agent.helpers import Log, LlmApi, BasePrompts,  MemoryPrompt
+from src.agent.helpers import Log, LlmApi, MemoryPrompt
+
 
 """ MBPP
 Implement an agent CLI interface
@@ -24,10 +24,64 @@ uv run moulinette_eval validate mbpp ../cache/mbpp_task.json \
 ../cache/mbpp_solution.json
 """
 
+class MBPPBasePrompts:
+
+    @classmethod
+    def get_aftercode_prompt(cls, sandbox_output: str) -> str:
+        out = f"[sandbox result]:\n{sandbox_output}\n[note]: If the code encounter a failure find a new solution !"
+        return out
+
+    @classmethod
+    def get_nocode_prompt(cls) -> str:
+        out = "Now you thought about the problem, use code and eventually tools to continue the searches\n"
+        return out
+
+    @classmethod
+    def get_first_prompts(cls, function_definition: str, task_definition: str, test_imports: list[str],
+                          test_list: list[str]) -> tuple[str, str]:
+        system_prompt = (
+            "You are a python coding agent "
+            "specialised to resolve MBPP problems. "
+            "You need to resolve Mostly Basic Python Problems. "
+            "Create the function demanded by the user with the associed requirements all in python. "
+            "Only code is important the user will not read your comments.\n"
+            "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
+            "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
+            "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
+            "Do not use python code block inside python code block !\n"
+            "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
+            "```python\nfinal_answer(code: str)\n```\n"
+        )
+        command = ["uv", "run", "sandbox", "--manual",
+                   "--mcp-stdio", "uv run python mcp_tools_mbpp.py"]
+        result = subprocess.run(
+            command,
+            cwd=".",
+            capture_output=True,
+            text=True,
+        )
+        system_prompt += "<SANDBOX_RULES>\n" + \
+            str(result.stdout) + "\n</SANDBOX_RULES>\n"
+
+        user_prompt = (
+            "<MAIN_OBJECTIVE>\n"
+            f"You need to create a python function :"
+            f"Description: {task_definition}\n"
+            f"Function definition: {function_definition}\n"
+        )
+        if test_imports:
+            user_prompt += "Premade imports of the environement are: {test_imports}\n"
+        if test_list:
+            user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
+
+        user_prompt += "</MAIN_OBJECTIVE>\n"
+        return (system_prompt, user_prompt)
+
 
 class MBPPTaskInput(BaseModel):
     """Input for MBPP task evaluation."""
     task_id: int
+
     task_definition: str
     function_definition: str
     test_imports: list[str] = Field(default_factory=list)
@@ -40,10 +94,14 @@ class NewMBPPTaskInput(BaseModel):
 
 class MBPPAgent(Agent):
 
-    task_definition: str
-    function_definition: str
-    test_imports: list[str] = Field(default_factory=list)
-    test_list: list[str] = Field(default_factory=list)
+    test_list: list[str]
+
+    def create_prompt(self) -> str:
+        if self.exec_result:
+            out = MBPPBasePrompts.get_aftercode_prompt(self.exec_result)
+        else:
+            out = MBPPBasePrompts.get_nocode_prompt()
+        return out
 
     def check_solution(self) -> tuple[bool, str]:
 
@@ -53,7 +111,7 @@ class MBPPAgent(Agent):
 
         # TODO use arguments in a json file
         command = ["uv", "run", "sandbox", "--mcp-stdio",
-                   "uv run python mcp_tools_swebench.py"]
+                   "uv run python mcp_tools_mbpp.py"]
         code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
         read = self.sandbox_term(command, code)
         if "[error]" in read:
@@ -69,7 +127,7 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
         mbpp_data = json.load(file)
     task = NewMBPPTaskInput(data=mbpp_data).data
 
-    pr = BasePrompts.get_first_prompts(
+    pr = MBPPBasePrompts.get_first_prompts(
         task.function_definition,
         task.task_definition, task.test_imports,
         task.test_list)
@@ -80,9 +138,6 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
     agent = MBPPAgent(
         task_id=str(task.task_id), benchmark="mbpp",
         system_prompt=system_prompt, output_path=output,
-        task_definition=task.task_definition,
-        function_definition=task.function_definition,
-        test_imports=task.test_imports,
         test_list=task.test_list,
         llmapi=llmapi,
         prompt=prompt,
@@ -97,113 +152,3 @@ def main(*args: Any, **kwargs: Any) -> None:
     while check:
         check = agent.next_step()
     agent.create_output()
-
-
-# TEMPORARY LINES/CODE/DATA ------------------------------------------------------------------------------------\/
-
-
-def test_llmapi() -> None:
-    try:
-        obj1 = LlmApi("mbpp_providers.json", "kek", "")
-        print(obj1.iurl)
-    except Exception as e:
-        print("\nt1", e)
-    try:
-        obj2 = LlmApi("mbpp_providers.json", "", "kek")
-        print(obj2.iurl)
-    except Exception as e:
-        print("\nt2", e)
-
-    obj3 = LlmApi("mbpp_providers.json", "kek", "model")
-    print("\nt3", obj3)
-
-    obj4 = LlmApi("mbpp_providers.json", "yyy", "model")
-    print("\nt4", obj4)
-
-    obj5 = LlmApi("mbpp_providers.json", "zzz", "5")
-    print("\nt5", obj5)
-
-    rep = obj4.response("mbpp_providers.json", "helo", 60)
-    print("rep", rep)
-
-# import json
-# if __name__ == "__main__":
-#    try:
-#        test_llmapi()
-#    except KeyboardInterrupt:
-#        print(Log.get_logs())
-#    except Exception as e:
-#        print(Log.get_logs(), f"error: {e}")
-
-
-# ------------------------- IDEAS ------------------------
-
-"""
-
-Your mandatory tools are only present when your own MCP
-server is connected.
-
-
-PROCESS
-
-context idee / MEMORY :
-
-problem !
-ADD AGENT-INTERN TOOLS !?
-edit buffer arg lignes n
-
-
-    important_data:
-        system_prompt
-        main_objective
-        current_objective
-        hints
-        tools
-
-    assistant format:
-        start with "<HINT:>" : very important data conterning the main problem 
-        objective finish -> definitive log
-        
-        if len messages > (150 + important_memory) : sumarize important_memory + 1 to important_memory + 100;
-        important_memory : important_hints, objectives data, system user , main goal ... + condensed memory
-
-
-    messages=[
-        {"role": "system", "content": self.agent_msg},
-        {"role": "agent", "content": msg},
-        {"role": "assistant", "content": msg},
-        {"role": "agent", "content": msg},
-        {"role": "assistant", "content": msg},
-        ...
-    ],
-    mbpp: 
-        errors
-        hint_storage = ""
-
-
-    swe:
-        objectif
-        errors
-        hint_storage = ""
-
-
-
-
-
-    -> ask llm use tool / generate code --
-    llm-choose--(1)(2)
-
-    (1) code_generated += llm_output
-    if done -> try/execute -> else demand next code with current code in prompt still end
-    -> give output to llm -(do it again or end)--
-    
-    (2) use tool
-    -> give output to llm -(do it again or end)--
-
-(2 type of message possible / 2 system prompt ?)
-
-
-
-
-
-"""

@@ -3,7 +3,6 @@ from openai import OpenAI
 import os
 import sys
 import json
-import subprocess
 from dotenv import load_dotenv
 import re
 
@@ -159,79 +158,12 @@ class MemoryError(Exception):
     pass
 
 
-class BasePrompts:
-
-    @classmethod
-    def get_first_prompts(cls, function_definition: str, task_definition: str, test_imports: list[str],
-                          test_list: list[str]) -> tuple[str, str]:
-        system_prompt = (
-            "You are a python coding agent "
-            "specialised to resolve MBPP problems. "
-            "global variable is strictly forbidden, global variable is strictly forbidden, global variable is strictly forbidden"
-            "You need to resolve Mostly Basic Python Problems. "
-            "Create the function demanded by the user with the associed requirements all in python. "
-            "Only code is important the user will not read your comments.\n"
-            "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
-            "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
-            "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
-            "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
-            "Do not use python code block inside python code block !\n"
-            "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
-            "```python\nfinal_answer(code: str)\n```\n"
-            "For more you have important specials functions to manage your memory, helping for problem researchs and flaw tracking:\n"
-            "```python\nset_new_current_objective(self, msg: str, old_objective_status: str)\n```\n"
-            "```python\nadd_main_objective_hint(msg: str)\n```\n"
-            "```python\nadd_current_objective_hint(msg: str)\n```\n"
-            "Theses functions have automated XML management\n"
-        )
-        # TODO use good tools
-        command = ["uv", "run", "sandbox", "--manual",
-                   "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
-        result = subprocess.run(
-            command,
-            cwd=".",
-            capture_output=True,
-            text=True,
-        )
-        system_prompt += "<SANDBOX_RULES>\n" + str(result.stdout) + "\n</SANDBOX_RULES>\n"
-
-        user_prompt = (
-            "<MAIN_OBJECTIVE>\n"
-            f"You need to create a python function :"
-            f"Description: {task_definition}\n"
-            f"Function definition: {function_definition}\n"
-        )
-        if test_imports:
-            user_prompt += "Premade imports of the environement are: {test_imports}\n"
-        if test_list:
-            user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
-
-        user_prompt += "</MAIN_OBJECTIVE>\n"
-        user_prompt += f"<CURRENT_OBJECTIVE>{BasePrompts.get_first_objective()}</CURRENT_OBJECTIVE>"
-        return (system_prompt, user_prompt)
-
-    @classmethod
-    def get_aftercode_prompt(cls, sandbox_output: str) -> str:
-        out = f"{sandbox_output}\n"
-        return out
-
-    @classmethod
-    def get_nocode_prompt(cls) -> str:
-        out = "Now you thought about the problem, use code and eventually tools to continue the searches\n"
-        return out
-
-    @classmethod
-    def get_first_objective(cls) -> str:
-        out = "Find a new current objective or resolve the main one directly"
-        return out
-
-
 class MemoryPrompt:
 
-    def __init__(self, base_prompt_system: str, base_prompt_user: str) -> None:
+    def __init__(self, base_prompt_system: str, base_prompt_user: str, first_objective: str = "") -> None:
         self.max = 0
         self.true_max = 0
-        self.current_objective = BasePrompts.get_first_objective()
+        self.current_objective = first_objective
 
         # tuples of (pos in messages, pos first car in message)
         self.main_hints: list[tuple[int, int]] = []
@@ -250,7 +182,7 @@ class MemoryPrompt:
                 "last message not from assistant, can't add main hint")
         self.main_hints.append(
             (len(self.messages) - 1, len(message["content"])))
-        message["content"] += f"\n<MAIN_HINT>{msg}</MAIN_HINT>"
+        message["content"] += f"\n<MAIN_OBJECTIVE_HINT>{msg}</MAIN_OBJECTIVE_HINT>"
 
     # Spceial Method usable by the llm
     def add_current_objective_hint(self, msg: str) -> None:
