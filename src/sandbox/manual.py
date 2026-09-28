@@ -1,6 +1,7 @@
 from mcp.types import Prompt, Resource, Tool
 
 from src.common.models import SandboxConfig
+from src.sandbox.security.builtins import REMOVED_BUILTINS
 
 
 def _signature(tool: Tool) -> str:
@@ -22,6 +23,8 @@ def build_manual(config: SandboxConfig, specs: list[Tool],
         f"- Writable directories: {', '.join(config.allowed_directories)}",
         f"- Limits: {config.max_execution_time_seconds}s per execution, "
         f"{config.max_memory_mb} MB of memory",
+        f"- Removed builtins: {', '.join(REMOVED_BUILTINS)}. open() and "
+        "imports work, but only within the lists above.",
         "- Each execution shares the same namespace; stdout and stderr "
         "are returned to you.",
         "- Call final_answer(value) to submit your final result.",

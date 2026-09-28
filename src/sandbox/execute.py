@@ -28,6 +28,16 @@ def _call_tool(name: str, pipe: Connection, /,
     return payload
 
 
+def _error_line(error: BaseException) -> int | None:
+    line = None
+    traceback = error.__traceback__
+    while traceback is not None:
+        if traceback.tb_frame.f_code.co_filename == "<sandbox>":
+            line = traceback.tb_lineno
+        traceback = traceback.tb_next
+    return line
+
+
 def _compile(code: str) -> Any:
     try:
         return compile(code, "<sandbox>", "single")
@@ -49,7 +59,9 @@ def _run_one(code: str, namespace: dict[str, Any],
             return ("final_answer", e.value)
         except Exception as e:
             name = type(e).__name__
-            return ("error", f"{name}: {e}" if str(e) else name)
+            message = f"{name}: {e}" if str(e) else name
+            line = _error_line(e)
+            return ("error", f"{message} (line {line})" if line else message)
 
 
 def _loop(pipe: Connection, config: SandboxConfig,
