@@ -67,12 +67,13 @@ class LlmApi:
             with open(providers_file, "r") as f_open:
                 self.urls = json.load(f_open)
         except Exception as e:
-            raise LlmApiError(f"can't load providers in: {providers_file} error: {e}")
+            raise LlmApiError(
+                f"can't load providers in: {providers_file} error: {e}")
         for url in self.urls:
             url["client"] = OpenAI(
-                                    base_url=url["url"],
-                                    api_key=os.getenv(url["api_key"], "0")
-                                    )
+                base_url=url["url"],
+                api_key=os.getenv(url["api_key"], "0")
+            )
 
         if baseurl and not basemodel:
             raise LlmApiError("url set need a model")
@@ -98,9 +99,9 @@ class LlmApi:
                 self.urls.append({
                     "name": baseurl, "models": [basemodel],
                     "client": OpenAI(
-                                    base_url=baseurl,
-                                    api_key=os.getenv("EXTRA_API_KEY", "0")
-                                    )
+                        base_url=baseurl,
+                        api_key=os.getenv("EXTRA_API_KEY", "0")
+                    )
                 })
         if self.iurl == -1:
             self.iurl = len(self.urls) - 1
@@ -111,27 +112,28 @@ class LlmApi:
         retries = 0
         while 1:
             try:
-                params = { # temp for msg TODO
+                params = {  # temp for msg TODO
                     "model": self.urls[self.iurl]["models"][self.imodel],
                     "messages": msg
                 }
-                
+
                 self.requests += 1
-                response = self.urls[self.iurl]["client"].chat.completions.create(**params)
+                response = self.urls[self.iurl]["client"].chat.completions.create(
+                    **params)
                 return {
-                        "llm_output": response.choices[0].message.content,
-                        "input_tokens": response.usage.prompt_tokens,
-                        "output_tokens": response.usage.completion_tokens,
-                        "api_url": self.urls[self.iurl]["url"],
-                        "model_name": self.get_current(),
-                        "retries": retries
+                    "llm_output": response.choices[0].message.content,
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens,
+                    "api_url": self.urls[self.iurl]["url"],
+                    "model_name": self.get_current(),
+                    "retries": retries
                 }
             except Exception as e:
                 retries += 1
                 usr = self.urls[self.iurl]
                 msg = (
-                        f"{usr['name']}"
-                        f"|{usr['models'][self.imodel]}: {e}"
+                    f"{usr['name']}"
+                    f"|{usr['models'][self.imodel]}: {e}"
                 )
                 Log.add_logs(msg)
                 print("response error; ", msg, file=sys.stderr)
@@ -152,38 +154,40 @@ class LlmApi:
     def get_current(self) -> str:
         return self.urls[self.iurl]["models"][self.imodel]
 
+
 class MemoryError(Exception):
     pass
+
 
 class BasePrompts:
 
     @classmethod
     def get_first_prompts(cls, function_definition: str, task_definition: str, test_imports: list[str],
-                                test_list: list[str]) -> tuple[str, str]:
+                          test_list: list[str]) -> tuple[str, str]:
         system_prompt = (
-                "You are a python coding agent "
-                "specialised to resolve MBPP problems. "
-                "You need to resolve Mostly Basic Python Problems. "
-                "Create the function demanded by the user with the associed requirements all in python. "
-                "Only code is important the user will not read your comments.\n"
-                "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
-                "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
-                "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
-                "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
-                "Do not use python code block inside python code block !\n"
-                "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
-                "```python\nfinal_answer(code: str)\n```\n"
-                "For more you have important specials functions to manage your memory, helping for problem researchs and flaw tracking:\n"
-                "```python\nset_new_current_objective(self, msg: str, old_objective_status: str)\n```\n"
-                "```python\nadd_main_objective_hint(msg: str)\n```\n"
-                "```python\nadd_current_objective_hint(msg: str)\n```\n"
-                "Theses functions have automated XML management\n"
+            "You are a python coding agent "
+            "specialised to resolve MBPP problems. "
+            "You need to resolve Mostly Basic Python Problems. "
+            "Create the function demanded by the user with the associed requirements all in python. "
+            "Only code is important the user will not read your comments.\n"
+            "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
+            "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
+            "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
+            "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
+            "Do not use python code block inside python code block !\n"
+            "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
+            "```python\nfinal_answer(code: str)\n```\n"
+            "For more you have important specials functions to manage your memory, helping for problem researchs and flaw tracking:\n"
+            "```python\nset_new_current_objective(self, msg: str, old_objective_status: str)\n```\n"
+            "```python\nadd_main_objective_hint(msg: str)\n```\n"
+            "```python\nadd_current_objective_hint(msg: str)\n```\n"
+            "Theses functions have automated XML management\n"
         )
         user_prompt = (
-                    "<MAIN_OBJECTIVE>\n"
-                    f"You need to create a python function, "
-                    f"Description: {task_definition}\n"
-                    f"Function definition: {function_definition}"
+            "<MAIN_OBJECTIVE>\n"
+            f"You need to create a python function, "
+            f"Description: {task_definition}\n"
+            f"Function definition: {function_definition}"
         )
 #        if test_imports:  # TODO imports are a tet to do after code ???
 #            user_prompt += "Premade imports of the environement are: {test_imports}\n"
@@ -191,7 +195,8 @@ class BasePrompts:
             user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
 
         # TODO use good tools
-        command = ["uv", "run", "sandbox", "--manual", "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
+        command = ["uv", "run", "sandbox", "--manual",
+                   "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
         result = subprocess.run(
             command,
             cwd=".",
@@ -217,7 +222,7 @@ class BasePrompts:
     def get_first_objective(cls) -> str:
         out = "Find a new current objective or resolve the main one directly"
         return out
-    
+
 
 class MemoryPrompt:
 
@@ -239,8 +244,10 @@ class MemoryPrompt:
 
         message = self.messages[-1]
         if message["role"] != "assistant":
-            raise MemoryError("last message not from assistant, can't add main hint")
-        self.main_hints.append((len(self.messages) - 1, len(message["content"])))
+            raise MemoryError(
+                "last message not from assistant, can't add main hint")
+        self.main_hints.append(
+            (len(self.messages) - 1, len(message["content"])))
         message["content"] += f"\n<MAIN_HINT>{msg}</MAIN_HINT>"
 
     # Spceial Method usable by the llm
@@ -248,8 +255,10 @@ class MemoryPrompt:
 
         message = self.messages[-1]
         if message["role"] != "assistant":
-            raise MemoryError("last message not from assistant, can't add current hint")
-        self.current_hints.append((len(self.messages) - 1, len(message["content"])))
+            raise MemoryError(
+                "last message not from assistant, can't add current hint")
+        self.current_hints.append(
+            (len(self.messages) - 1, len(message["content"])))
         message["content"] += f"\n<CURRENT_HINT>{msg}</CURRENT_HINT>"
 
     # Spceial Method usable by the llm
@@ -277,7 +286,8 @@ class MemoryPrompt:
         out = []
         message = self.messages[-1]
         if message["role"] != "assistant":
-            raise MemoryError("last message not from assistant, can't extract code")
+            raise MemoryError(
+                "last message not from assistant, can't extract code")
         data = message["content"]
         match model:
             case "test":
@@ -286,8 +296,8 @@ class MemoryPrompt:
                 pass
             case _:
                 try:
-                    out = re.findall(r"```python\s*\n(.*?)```", data, flags=re.DOTALL)
+                    out = re.findall(r"```python\s*\n(.*?)```",
+                                     data, flags=re.DOTALL)
                 except Exception:
                     pass
         return out
-

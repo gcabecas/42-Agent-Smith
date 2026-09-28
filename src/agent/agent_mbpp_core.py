@@ -1,4 +1,6 @@
 
+import sys
+import os
 from typing import Any
 import json
 from pydantic import BaseModel, Field
@@ -22,6 +24,7 @@ uv run moulinette_eval validate mbpp ../cache/mbpp_task.json \
 ../cache/mbpp_solution.json
 """
 
+
 class MBPPTaskInput(BaseModel):
     """Input for MBPP task evaluation."""
     task_id: int
@@ -29,6 +32,7 @@ class MBPPTaskInput(BaseModel):
     function_definition: str
     test_imports: list[str] = Field(default_factory=list)
     test_list: list[str] = Field(default_factory=list)
+
 
 class NewMBPPTaskInput(BaseModel):
     data: MBPPTaskInput
@@ -48,39 +52,41 @@ class MBPPAgent(Agent):
             asserts += f"\n\n{elem}"
 
         # TODO use arguments in a json file
-        command = ["uv", "run", "sandbox", "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
+        command = ["uv", "run", "sandbox", "--mcp-stdio",
+                   "uv run python mcp_tools_swebench.py"]
         code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
         read = self.sandbox_term(command, code)
         if "[error]" in read:
             return (False, read)
         return (True, "no error")
 
+
 def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
-        providers_file: str = "config/mbpp_providers.json",
-        provider_url: str = "", model_name: str = "") -> MBPPAgent:
+                      providers_file: str = "config/mbpp_providers.json",
+                      provider_url: str = "", model_name: str = "") -> MBPPAgent:
 
     with open(task_file, "r") as file:
         mbpp_data = json.load(file)
     task = NewMBPPTaskInput(data=mbpp_data).data
 
     pr = BasePrompts.get_first_prompts(
-                                    task.function_definition,
-                                    task.task_definition, task.test_imports,
-                                    task.test_list)
+        task.function_definition,
+        task.task_definition, task.test_imports,
+        task.test_list)
     system_prompt, user_prompt = pr
-    prompt=MemoryPrompt(system_prompt, user_prompt)
+    prompt = MemoryPrompt(system_prompt, user_prompt)
     llmapi = LlmApi(providers_file, provider_url, model_name)
-    
+
     agent = MBPPAgent(
-                task_id=str(task.task_id), benchmark="mbpp",
-                system_prompt=system_prompt, output_path=output,
-                task_definition=task.task_definition,
-                function_definition=task.function_definition,
-                test_imports=task.test_imports,
-                test_list=task.test_list,
-                llmapi=llmapi,
-                prompt=prompt,
-                imports="\n".join(f"import {imp}" for imp in task.test_imports)
+        task_id=str(task.task_id), benchmark="mbpp",
+        system_prompt=system_prompt, output_path=output,
+        task_definition=task.task_definition,
+        function_definition=task.function_definition,
+        test_imports=task.test_imports,
+        test_list=task.test_list,
+        llmapi=llmapi,
+        prompt=prompt,
+        imports="\n".join(f"import {imp}" for imp in task.test_imports)
     )
     return agent
 
@@ -93,15 +99,8 @@ def main(*args: Any, **kwargs: Any) -> None:
     agent.create_output()
 
 
-
-
-
-
-
 # TEMPORARY LINES/CODE/DATA ------------------------------------------------------------------------------------\/
 
-import os
-import sys
 
 def test_llmapi() -> None:
     try:
@@ -127,8 +126,8 @@ def test_llmapi() -> None:
     rep = obj4.response("mbpp_providers.json", "helo", 60)
     print("rep", rep)
 
-#import json
-#if __name__ == "__main__":
+# import json
+# if __name__ == "__main__":
 #    try:
 #        test_llmapi()
 #    except KeyboardInterrupt:
@@ -137,9 +136,7 @@ def test_llmapi() -> None:
 #        print(Log.get_logs(), f"error: {e}")
 
 
-
 # ------------------------- IDEAS ------------------------
-
 
 """
 
@@ -210,5 +207,3 @@ edit buffer arg lignes n
 
 
 """
-
-
