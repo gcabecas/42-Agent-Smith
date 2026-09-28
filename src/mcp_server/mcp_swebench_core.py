@@ -438,7 +438,7 @@ class SWETools(McpToolsCore):
             self.operation_mutex.release()
         self.message_complete(read, tid)
 
-    def run_command(self, tid: int, command: str, workdir: str = "") -> None:
+    def run_command(self, tid: int, command: str, workdir: str = ".") -> str:
         self.operation_mutex.acquire()
         read = ""
         try:
@@ -452,10 +452,11 @@ class SWETools(McpToolsCore):
             read = str(result.stdout)
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True)
-            return
+            return read
         finally:
             self.operation_mutex.release()
         self.message_complete(read, tid)
+        return read
 
     def __init__(self, *args, **kwargs) -> None:
         methods = {

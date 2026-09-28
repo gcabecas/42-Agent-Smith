@@ -112,7 +112,7 @@ class LlmApi:
         retries = 0
         while 1:
             try:
-                params = {  # temp for msg TODO
+                params = {
                     "model": self.urls[self.iurl]["models"][self.imodel],
                     "messages": msg
                 }
@@ -167,6 +167,7 @@ class BasePrompts:
         system_prompt = (
             "You are a python coding agent "
             "specialised to resolve MBPP problems. "
+            "global variable is strictly forbidden, global variable is strictly forbidden, global variable is strictly forbidden"
             "You need to resolve Mostly Basic Python Problems. "
             "Create the function demanded by the user with the associed requirements all in python. "
             "Only code is important the user will not read your comments.\n"
@@ -183,17 +184,6 @@ class BasePrompts:
             "```python\nadd_current_objective_hint(msg: str)\n```\n"
             "Theses functions have automated XML management\n"
         )
-        user_prompt = (
-            "<MAIN_OBJECTIVE>\n"
-            f"You need to create a python function, "
-            f"Description: {task_definition}\n"
-            f"Function definition: {function_definition}"
-        )
-#        if test_imports:  # TODO imports are a tet to do after code ???
-#            user_prompt += "Premade imports of the environement are: {test_imports}\n"
-        if test_list:
-            user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
-
         # TODO use good tools
         command = ["uv", "run", "sandbox", "--manual",
                    "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
@@ -203,7 +193,19 @@ class BasePrompts:
             capture_output=True,
             text=True,
         )
-        user_prompt += str(result.stdout) + "\n"
+        system_prompt += "<SANDBOX_RULES>\n" + str(result.stdout) + "\n</SANDBOX_RULES>\n"
+
+        user_prompt = (
+            "<MAIN_OBJECTIVE>\n"
+            f"You need to create a python function :"
+            f"Description: {task_definition}\n"
+            f"Function definition: {function_definition}\n"
+        )
+        if test_imports:
+            user_prompt += "Premade imports of the environement are: {test_imports}\n"
+        if test_list:
+            user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
+
         user_prompt += "</MAIN_OBJECTIVE>\n"
         user_prompt += f"<CURRENT_OBJECTIVE>{BasePrompts.get_first_objective()}</CURRENT_OBJECTIVE>"
         return (system_prompt, user_prompt)

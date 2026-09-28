@@ -129,14 +129,15 @@ class Agent(SolutionOutput):
                 term.expect_exact(
                     ["\n>>> ", "\n... ", "\n[error] ", "\n[final_answer] ."])
                 result += term.before + term.after
-                if term.after.startswith("\n[error]"):
+                if term.after.startswith("\n[error] "):
                     term.sendline("")
                     term.expect_exact(["\n>>> ", "\n... "])
                     result += term.before
+                    break
                 if term.after.startswith("\n[final_answer] ."):
                     break
+            term.sendline("")
             term.sendline("exit")
-            term.terminate(force=True)
         except Exception:
             raise
         finally:
