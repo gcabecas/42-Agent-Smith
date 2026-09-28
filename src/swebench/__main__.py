@@ -23,7 +23,7 @@ def main() -> None:
     print(f"[task] {task.instance_id} ({task.repo})")
     print(f"[image] {task.docker_image}")
 
-    with DockerTestbed(task.docker_image, python=args.python) as testbed:
+    with DockerTestbed(task.docker_image, {"8042/tcp": ("127.0.0.1", 8042)}, python=args.python) as testbed:
         if not testbed.has_image():
             print("[image] pulling, this takes a few minutes...")
         testbed.setup(eval_script=task.eval_script)

@@ -34,7 +34,7 @@ class SWEBasePrompts:
 
     @classmethod
     def get_nocode_prompt(cls) -> str:
-        out = "Now you thought about the problem, use code and eventually tools to continue the searches\n"
+        out = "Now you thought about the problem, use tools and eventually code to continue the searches\n"
         return out
 
     @classmethod
@@ -123,15 +123,13 @@ class SWEAgent(Agent):
 
     def check_solution(self) -> tuple[bool, str]:
 
-        asserts = ""
-        for elem in self.test_list:
-            asserts += f"\n\n{elem}"
-
         # TODO use arguments in a json file
-        command = ["uv", "run", "sandbox", "--mcp-stdio",
-                   "uv run python mcp_tools_swebench.py"]
-        code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
-        read = self.sandbox_term(command, code)
+#        command = ["uv", "run", "sandbox", "--mcp-server",
+#                   "http://127.0.0.1:8042"]
+#        code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
+#        read = self.sandbox_term(command, code)
+        read = "error"
+    
         if "[error]" in read:
             return (False, read)
         return (True, "no error")
@@ -139,7 +137,8 @@ class SWEAgent(Agent):
 
 def create_mbpp_agent(*, task_file: str, output: str = "swebench_solution.json",
                       providers_file: str = "config/swe_providers.json",
-                      provider_url: str = "", model_name: str = "") -> SWEAgent:
+                      provider_url: str = "", model_name: str = ""
+                      ) -> tuple[SWEAgent, SWEBenchTaskInput]:
 
     with open(task_file, "r") as file:
         mbpp_data = json.load(file)
@@ -155,18 +154,44 @@ def create_mbpp_agent(*, task_file: str, output: str = "swebench_solution.json",
     prompt = MemoryPrompt(system_prompt, user_prompt, SWEBasePrompts.get_first_objective())
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
+    command = ["uv", "run", "sandbox", "--mcp-server",
+                "http://127.0.0.1:8042"]
     agent = SWEAgent(
         task_id=task.instance_id, benchmark="swebench",
         system_prompt=system_prompt, output_path=output,
         llmapi=llmapi,
         prompt=prompt,
+        sandbox_cmd=command
     )
-    return agent
+    return (agent, task)
+
+
+from src.sandbox.mcp_client import McpClient
+from src.swebench.testbed import DockerTestbed
 
 
 def main(*args: Any, **kwargs: Any) -> None:
-    agent = create_mbpp_agent(**kwargs)
-    check = True
-    while check:
-        check = agent.next_step()
-    agent.create_output()
+
+    agent, task = create_mbpp_agent(**kwargs)
+    print(f"[task] {task.instance_id} ({task.repo})")
+    print(f"[image] {task.docker_image}")
+
+    with DockerTestbed(task.docker_image, {"8042/tcp": ("127.0.0.1", 8042)}) as testbed:
+        if not testbed.has_image():
+            print("[image] pulling, this takes a few minutes...")
+        testbed.setup(eval_script=task.eval_script)
+        print(f"[container] {testbed.container.id[:12]} started")
+        client = McpClient(command=testbed.mcp_command())
+        print(f"[tools] {', '.join(client.tools)}")
+
+        check = True
+        while check:
+            check = agent.next_step()
+            check = False
+        agent.create_output()
+
+    print("[container] removed")
+
+
+if __name__ == "__main__":
+    main()

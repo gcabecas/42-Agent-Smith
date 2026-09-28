@@ -85,6 +85,7 @@ class Agent(SolutionOutput):
     init: bool = False
     start: datetime = datetime.now()
     imports: str = ""
+    sandbox_cmd: list[str]
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -106,10 +107,11 @@ class Agent(SolutionOutput):
         for elem in self.prompt.messages:
             print(elem)
 
-    def sandbox_term(self, command: list[str], code: str) -> str:
+    def sandbox_term(self, code: str) -> str:
 
         result = ""
-        term = pexpect.spawn(command[0], command[1:], encoding="utf-8")
+        term = pexpect.spawn(self.sandbox_cmd[0],
+                             self.sandbox_cmd[1:], encoding="utf-8")
         lines = code.split("\n")
         while lines and lines[-1].strip() == "":
             lines.pop()
@@ -149,18 +151,26 @@ class Agent(SolutionOutput):
             self.prompt.add_message(prompt)
         else:
             self.init = True
-        resp = self.llmapi.response(self.prompt.messages)
+
+        # resp = self.llmapi.response(self.prompt.messages) # TODO DEBUG
+        resp = {
+            "llm_output": "\n```python\nrun_command('ls')\n```",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "api_url": "no url",
+            "model_name": "no model",
+            "retries": 0
+        }
+        # DEBUG-end
+
         self.prompt.add_message(resp["llm_output"], "assistant")
         codes = self.prompt.get_message_codes(self.llmapi.get_current())
 
         self.exec_result = ""
         out = []
         for i, code in enumerate(codes, 1):
-            # TODO use arguments in a json file
-            command = ["uv", "run", "sandbox", "--mcp-stdio",
-                       "uv run python mcp_tools_swebench.py"]
             code = f"{self.imports}\n{code}"
-            read = self.sandbox_term(command, code)
+            read = self.sandbox_term(code)
             out.append(read)
             new.sandbox_input += f"[code block: {i}]\n{code}\n"
             new.sandbox_output += f"[code block: {i}]\n{read}\n"

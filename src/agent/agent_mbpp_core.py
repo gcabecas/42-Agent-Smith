@@ -135,13 +135,17 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
     prompt = MemoryPrompt(system_prompt, user_prompt)
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
+    # TODO use arguments in a json file
+    command = ["uv", "run", "sandbox", "--mcp-stdio",
+                "uv run python mcp_tools_swebench.py"]
     agent = MBPPAgent(
         task_id=str(task.task_id), benchmark="mbpp",
         system_prompt=system_prompt, output_path=output,
         test_list=task.test_list,
         llmapi=llmapi,
         prompt=prompt,
-        imports="\n".join(f"import {imp}" for imp in task.test_imports)
+        imports="\n".join(f"import {imp}" for imp in task.test_imports),
+        sandbox_cmd=command
     )
     return agent
 
