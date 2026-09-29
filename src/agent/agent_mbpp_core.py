@@ -171,7 +171,7 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
         task.task_definition, task.test_imports,
         task.test_list)
     system_prompt, user_prompt = pr
-    prompt = MemoryPrompt(system_prompt, user_prompt)
+    MemoryPrompt.init(system_prompt, user_prompt)
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
     # TODO use arguments in a json file
@@ -182,7 +182,6 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
         system_prompt=system_prompt, output_path=output,
         test_list=task.test_list,
         llmapi=llmapi,
-        prompt=prompt,
         imports="\n".join(f"import {imp}" for imp in task.test_imports),
         sandbox_cmd=command
     )

@@ -79,7 +79,6 @@ class Agent(SolutionOutput):
     output_path: str = Field(pattern=r".*\.json$")
 
     llmapi: LlmApi
-    prompt: MemoryPrompt
     exec_result: str = ""
     init: bool = False
     start: datetime = datetime.now()
@@ -102,7 +101,7 @@ class Agent(SolutionOutput):
         for key, elem in new.__dict__.items():
             print(f"{key}|=|{elem}", file=sys.stderr)
         print("[ PROMPT: ]")
-        for elem in self.prompt.messages:
+        for elem in MemoryPrompt.messages:
             print(elem)
 
     def next_step(self) -> bool:
@@ -114,23 +113,22 @@ class Agent(SolutionOutput):
         new = StepMetrics(step=len(self.steps) + 1)
         self.steps.append(new)
         if self.init:
-            self.prompt.add_message(prompt)
+            MemoryPrompt.add_message(prompt)
         else:
             self.init = True
 
-#        resp = self.llmapi.response(self.prompt.messages)
-        resp = {  # TODO
-            "llm_output": "\n```python\nset_new_current_objective('Investigate the error and find a solution to the vector addition problem', 'in progress')\n```",
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "api_url": "no url",
-            "model_name": "no model",
-            "retries": 0
-        }
-        # DEBUG-end
+        resp = self.llmapi.response(MemoryPrompt.messages)
+#        resp = {  # TODO
+#            "llm_output": "\n```python\nset_new_current_objective('Investigate the error and find a solution to the vector addition problem', 'in progress')\n```",
+#            "input_tokens": 0,
+#            "output_tokens": 0,
+#            "api_url": "no url",
+#            "model_name": "no model",
+#            "retries": 0
+#        }
 
-        self.prompt.add_message(resp["llm_output"], "assistant")
-        codes = self.prompt.get_message_codes(self.llmapi.get_current())
+        MemoryPrompt.add_message(resp["llm_output"], "assistant")
+        codes = MemoryPrompt.get_message_codes(self.llmapi.get_current())
 
         self.exec_result = ""
         out = []

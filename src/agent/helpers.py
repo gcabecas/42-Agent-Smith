@@ -1,4 +1,5 @@
 
+from typing import Any
 from openai import OpenAI
 import os
 import sys
@@ -154,73 +155,132 @@ class LlmApi:
         return self.urls[self.iurl]["models"][self.imodel]
 
 
-class MemoryError(Exception):
+class MemoryPromptError(Exception):
     pass
 
+class MemoryPromptSave(Exception):
+
+    def __str__(self):
+        return str(self.data)
+    
+    def __init__(self, data):
+        self.data = data
 
 class MemoryPrompt:
 
-    def __init__(self, base_prompt_system: str, base_prompt_user: str, first_objective: str = "") -> None:
-        self.max = 0
-        self.true_max = 0
-        self.current_objective = first_objective
+    @classmethod
+    def load_data(cls, data: dict[str, Any]) -> None:
+        for key, elem in data.items():
+            setattr(cls, key, elem)
 
-        # tuples of (pos in messages, pos first car in message)
-        self.main_hints: list[tuple[int, int]] = []
-        self.current_hints: list[tuple[int, int]] = []
+    @classmethod
+    def raise_data(cls) -> None:
+        data = {
+            "messages": cls.messages,
+            "memory_mode": cls.memory_mode,
+            "max": cls.max,
+            "true_max": cls.true_max,
+            "save_len": cls.save_len,
+            "current_objective": cls.current_objective,
+            "main_hints": cls.main_hints,
+            "current_hints": cls.current_hints
+        }
+        raise MemoryPromptSave(data)
 
-        self.messages = [{"role": "system", "content": base_prompt_system}]
-        self.messages.append({"role": "user", "content": base_prompt_user})
-        self.base_len = 2
+    @classmethod
+    def init(cls, base_prompt_system: str, base_prompt_user: str, launch_objective: str = "") -> None:
+        cls.memory_mode = False
+
+        cls.messages = [{"role": "system", "content": base_prompt_system}]
+        cls.messages.append({"role": "user", "content": base_prompt_user})
+
+        if launch_objective:
+            cls.memory_mode = True
+            cls.max = 0
+            cls.true_max = 0
+            cls.save_len = 2
+
+            cls.current_objective = ""
+            cls.main_hints: list[str] = []
+            cls.current_hints: list[list[str]] = []
+
+            current_objective = f"<CURRENT_OBJECTIVE>\n{launch_objective}\n</CURRENT_OBJECTIVE>"
+            cls.current_hints.append(
+                [current_objective]
+            )
+            cls.add_message(current_objective)
 
     # Spceial Method usable by the llm
-    def add_main_objective_hint(self, msg: str) -> None:
+    @classmethod
+    def add_main_objective_hint(cls, msg: str) -> None:
+        if not cls.memory_mode:
+            raise MemoryPromptError("Memory mode not configured")
 
-        message = self.messages[-1]
-        if message["role"] != "assistant":
-            raise MemoryError(
-                "last message not from assistant, can't add main hint")
-        self.main_hints.append(
-            (len(self.messages) - 1, len(message["content"])))
-        message["content"] += f"\n<MAIN_OBJECTIVE_HINT>{msg}</MAIN_OBJECTIVE_HINT>"
+        msg = f"\n<MAIN_OBJECTIVE_HINT>\n{msg}\n</MAIN_OBJECTIVE_HINT>"
+        cls.main_hints.append(msg)
+        cls.add_message(msg)
 
-    # Spceial Method usable by the llm
-    def add_current_objective_hint(self, msg: str) -> None:
-
-        message = self.messages[-1]
-        if message["role"] != "assistant":
-            raise MemoryError(
-                "last message not from assistant, can't add current hint")
-        self.current_hints.append(
-            (len(self.messages) - 1, len(message["content"])))
-        message["content"] += f"\n<CURRENT_HINT>{msg}</CURRENT_HINT>"
+        cls.raise_data()
 
     # Spceial Method usable by the llm
-    def set_new_current_objective(self, msg: str, old_objective_status: str) -> None:
+    @classmethod
+    def add_current_objective_hint(cls, msg: str) -> None:
+        if not cls.memory_mode:
+            raise MemoryPromptError("Memory mode not configured")
 
-        main_hint = f"{self.current_objective}<STATUS:>{old_objective_status}"
-        self.add_main_objective_hint(main_hint)
-        self.current_objective = msg
+        msg = f"\n<CURRENT_OBJECTIVE_HINT>\n{msg}\n</CURRENT_OBJECTIVE_HINT>"
+        cls.current_hints[-1].append(msg)
+        cls.add_message(msg)
 
-    # if len(all_memory) > self.max + len(important_memory) ...
-    # if len(all_memory) > self.true_max ...
-    def compress_memory(self) -> None:
+        cls.raise_data()
+
+    # Spceial Method usable by the llm
+    @classmethod
+    def set_new_current_objective(cls, objective: str, previous_current_objective_status: str) -> None:
+        if not cls.memory_mode:
+            raise MemoryPromptError("Memory mode not configured")
+
+        c_obj = previous_current_objective_status 
+        if cls.current_objective:
+            main_hint = f"OBJECTIVE:{cls.current_objective}. STATUS:{c_obj}"
+            cls.add_main_objective_hint(main_hint)
+        cls.current_objective = objective
+        new_objective = f"<CURRENT_OBJECTIVE>\n{objective}\n</CURRENT_OBJECTIVE>"
+        cls.current_hints.append([new_objective])
+        cls.add_message(new_objective)
+
+        print("wtf dude")
+        for elem in cls.messages:
+            print(elem)
+
+        cls.raise_data()
+
+    # if len(all_memory) > cls.max + len(important_memory) ...
+    # if len(all_memory) > cls.true_max ...
+    @classmethod
+    def compress_memory(cls) -> None:
         # TODO
         pass
 
-    def get_messages(self) -> list[dict[str, str]]:
-        return self.messages
+    @classmethod
+    def get_messages(cls) -> list[dict[str, str]]:
+        return cls.messages
 
-    def add_message(self, msg: str, role: str = "user") -> None:
-        self.messages.append({"role": role, "content": msg})
+    @classmethod
+    def add_message(cls, msg: str, role: str = "user") -> None:
+        if cls.messages[-1]["role"] != role:
+            cls.messages.append({"role": role, "content": msg})
+        else:
+            cls.messages[-1]["content"] += f"\n{msg}"
 
-    def get_message_codes(self, model: str) -> list[str]:
+    @classmethod
+    def get_message_codes(cls, model: str) -> list[str]:
         # TODO
 
         out = []
-        message = self.messages[-1]
+        message = cls.messages[-1]
         if message["role"] != "assistant":
-            raise MemoryError(
+            raise MemoryPromptError(
                 "last message not from assistant, can't extract code")
         data = message["content"]
         match model:

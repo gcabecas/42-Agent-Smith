@@ -88,10 +88,11 @@ class SWEBasePrompts:
             "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
             "```python\nfinal_answer(git_diff: str)\n```\n"
             "For more you have very important specials functions to manage your memory, helping for investigating, problem researchs and flaw tracking:\n"
-            "```python\nset_new_current_objective(self, msg: str, old_objective_status: str)\n```\n"
+            "```python\nset_new_current_objective(objective: str, previous_current_objective_status: str)\n```\n"
             "```python\nadd_main_objective_hint(msg: str)\n```\n"
             "```python\nadd_current_objective_hint(msg: str)\n```\n"
             "Theses functions have automated xml management.\n"
+            "Warning ! Theses functions stop the code block execution !\n"
             "THESES FUNCTION ASSURE PROMPT SAFETY AND DATA SAVING !\n"
         )
         system_prompt += "<SANDBOX_RULES>\n" + \
@@ -99,14 +100,12 @@ class SWEBasePrompts:
 
         user_prompt = (
             "<MAIN_OBJECTIVE>\n"
-            f"You need to resolve the following problem statement:"
+            f"You need to resolve the following problem statement:\n"
             f"{problem_statement}\n"
             "</MAIN_OBJECTIVE>\n"
         )
         if hints_text:
             user_prompt += f"<MAIN_OBJECTIVE_HINT>\n{hints_text}\n</MAIN_OBJECTIVE_HINT>\n"
-
-        user_prompt += f"<CURRENT_OBJECTIVE>{cls.get_first_objective()}</CURRENT_OBJECTIVE>"
         return (system_prompt, user_prompt)
 
 
@@ -169,7 +168,7 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
         manual
     )
     system_prompt, user_prompt = pr
-    prompt = MemoryPrompt(system_prompt, user_prompt, SWEBasePrompts.get_first_objective())
+    MemoryPrompt.init(system_prompt, user_prompt, SWEBasePrompts.get_first_objective())
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
     sandbox = Sandbox(SandboxConfig(), tools=client.tools)
@@ -177,7 +176,6 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
         task_id=task.instance_id, benchmark="swebench",
         system_prompt=system_prompt, output_path=output,
         llmapi=llmapi,
-        prompt=prompt,
         mcp_tools=client.tools,
         sandbox=sandbox
     )
@@ -200,7 +198,6 @@ def main(*args: Any, **kwargs: Any) -> None:
             check = True
             while check:
                 check = agent.next_step()
-                check = False
             agent.create_output()
         except Exception:
             raise

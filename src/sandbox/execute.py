@@ -15,6 +15,7 @@ from src.sandbox.security.builtins import SAFE_BUILTINS
 from src.sandbox.security.filesystem import restricted_open
 from src.sandbox.security.imports import restricted_import
 from src.sandbox.security.network import block_network
+from src.agent.helpers import MemoryPrompt, MemoryPromptSave
 
 MAX_OUTPUT_CHARS = 10_000
 
@@ -55,6 +56,8 @@ def _run_one(code: str, namespace: dict[str, Any],
         try:
             exec(_compile(code), namespace)
             return ("ok", None)
+        except MemoryPromptSave as e:
+            return ("ok", e.data)
         except FinalAnswer as e:
             return ("final_answer", e.value)
         except Exception as e:
@@ -76,6 +79,10 @@ def _loop(pipe: Connection, config: SandboxConfig,
     exec_builtins["open"] = partial(
         restricted_open, config.allowed_directories)
     exec_builtins["final_answer"] = final_answer
+
+    exec_builtins["set_new_current_objective"] = MemoryPrompt.set_new_current_objective
+    exec_builtins["add_main_objective_hint"] = MemoryPrompt.add_main_objective_hint
+    exec_builtins["add_current_objective_hint"] = MemoryPrompt.add_current_objective_hint
 
     for name in tool_names:
         exec_builtins[name] = partial(_call_tool, name, pipe)
@@ -120,6 +127,9 @@ class Sandbox:
     def run(self, code: str) -> Result:
         self.pipe.send(code)
         status, value = self._wait_for_result()
+        if status == "ok" and value:
+            MemoryPrompt.load_data(value)
+            value = None
 
         with open(self.output_path) as output_file:
             output = output_file.read(MAX_OUTPUT_CHARS + 1)
