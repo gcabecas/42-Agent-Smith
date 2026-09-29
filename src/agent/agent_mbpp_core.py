@@ -98,7 +98,7 @@ class MBPPAgent(Agent):
     test_list: list[str]
     sandbox_cmd: list[str]
 
-    def sandbox_term(self, code: str) -> tuple[str, bool]:
+    def sandbox_term(self, code: str) -> tuple[str, str]:
 
         result = ""
         term = pexpect.spawn(self.sandbox_cmd[0],
@@ -131,8 +131,9 @@ class MBPPAgent(Agent):
         read = result.replace("\r\n", "\n")
 
         if read.rstrip().endswith("[final_answer] ."):
-            return (read, True)
-        return (read, False)
+            final = read.split("[final_answer] ")[1]
+            return (read, final)
+        return (read, "")
 
     def create_prompt(self) -> str:
         if self.exec_result:

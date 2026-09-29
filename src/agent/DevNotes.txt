@@ -2,6 +2,6 @@ uv run python agent_mbpp.py --task-file mbpp_test_task.json
 
 clean not good arg input message
 
-Check input data ! are imports possibles ? are asserts possibles ? ...
+usage of exit in sandbox close it, can't create function or variable with this name (llm can !)
 
-usage of exit in sandbox close it, can't create function or variable with this name
+verifie the tokens usage !

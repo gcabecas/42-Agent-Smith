@@ -118,9 +118,9 @@ class Agent(SolutionOutput):
         else:
             self.init = True
 
-        # resp = self.llmapi.response(self.prompt.messages) # TODO DEBUG
-        resp = {
-            "llm_output": "\n```python\nrun_command('ls')\n```",
+#        resp = self.llmapi.response(self.prompt.messages)
+        resp = {  # TODO
+            "llm_output": "\n```python\nset_new_current_objective('Investigate the error and find a solution to the vector addition problem', 'in progress')\n```",
             "input_tokens": 0,
             "output_tokens": 0,
             "api_url": "no url",
@@ -134,16 +134,16 @@ class Agent(SolutionOutput):
 
         self.exec_result = ""
         out = []
-        for i, stop in enumerate(codes, 1):
+        for i, code in enumerate(codes, 1):
             if self.imports:
                 code = f"{self.imports}\n{code}"
-            read, end = self.sandbox_term(code)
+            read, final = self.sandbox_term(code)
             out.append(read)
             new.sandbox_input += f"[code block: {i}]\n{code}\n"
             new.sandbox_output += f"[code block: {i}]\n{read}\n"
 
-            if stop:
-                self.solution = read.split("[final_answer] ")[1]
+            if final:
+                self.solution = final
                 self.set_step_data(new, resp, start)
                 return False
 

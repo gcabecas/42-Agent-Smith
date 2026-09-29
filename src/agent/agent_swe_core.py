@@ -9,6 +9,28 @@ from src.sandbox.execute import Sandbox
 from src.agent.agent import Agent
 from src.agent.helpers import LlmApi, MemoryPrompt
 from src.swebench.server_docker import server_docker
+from src.sandbox.mcp_client import McpClient
+from src.sandbox.manual import build_manual
+from src.swebench.testbed import DockerTestbed
+
+
+#class SWEBenchTaskInput(BaseModel):
+#    """Input for a SWE-bench task, provided by the moulinette.
+#    Your agent receives this and must produce a git patch that fixes
+#    the issue.
+#    """
+#    instance_id: str = Field(
+#        ..., description="SWE-bench instance identifier (e.g., 'sympy__sympy-23534')")
+#    problem_statement: str = Field(
+#        ..., description="The GitHub issue description, what needs to be fixed")
+#    docker_image: str = Field(
+#        ..., description="Full Docker image name to pull (e.g., 'swebench/sweb.eval.x86_64. sympy_1776_sympy-23534:latest')")
+#    eval_script: str = Field(
+#        ..., description="Bash script to run inside the container to evaluate the patch")
+#    hints_text: str = Field(
+#        default="", description="Optional hints about the issue (may be empty)")
+#    repo: str = Field(
+#        default="", description="Repository name (e.g., 'sympy/sympy')")
 
 
 """ SWE
@@ -50,7 +72,7 @@ class SWEBasePrompts:
 
     @classmethod
     def get_first_prompts(cls, repo: str, problem_statement: str,
-                                hints_text: list[str]) -> tuple[str, str]:
+                                hints_text: list[str], manual: str) -> tuple[str, str]:
 
         system_prompt = (
             "You are a Software Engineering coding agent"
@@ -72,21 +94,13 @@ class SWEBasePrompts:
             "Theses functions have automated xml management.\n"
             "THESES FUNCTION ASSURE PROMPT SAFETY AND DATA SAVING !\n"
         )
-        command = ["uv", "run", "sandbox", "--manual",
-                   "--mcp-server", "http://localhost:8042"]
-        result = subprocess.run(
-            command,
-            cwd=".",
-            capture_output=True,
-            text=True,
-        )
         system_prompt += "<SANDBOX_RULES>\n" + \
-            str(result.stdout) + "\n</SANDBOX_RULES>\n"
+            str(manual) + "\n</SANDBOX_RULES>\n"
 
         user_prompt = (
             "<MAIN_OBJECTIVE>\n"
-            f"You need to create a python function :"
-            f"Description: {problem_statement}\n"
+            f"You need to resolve the following problem statement:"
+            f"{problem_statement}\n"
             "</MAIN_OBJECTIVE>\n"
         )
         if hints_text:
@@ -96,25 +110,6 @@ class SWEBasePrompts:
         return (system_prompt, user_prompt)
 
 
-#class SWEBenchTaskInput(BaseModel):
-#    """Input for a SWE-bench task, provided by the moulinette.
-#    Your agent receives this and must produce a git patch that fixes
-#    the issue.
-#    """
-#    instance_id: str = Field(
-#        ..., description="SWE-bench instance identifier (e.g., 'sympy__sympy-23534')")
-#    problem_statement: str = Field(
-#        ..., description="The GitHub issue description, what needs to be fixed")
-#    docker_image: str = Field(
-#        ..., description="Full Docker image name to pull (e.g., 'swebench/sweb.eval.x86_64. sympy_1776_sympy-23534:latest')")
-#    eval_script: str = Field(
-#        ..., description="Bash script to run inside the container to evaluate the patch")
-#    hints_text: str = Field(
-#        default="", description="Optional hints about the issue (may be empty)")
-#    repo: str = Field(
-#        default="", description="Repository name (e.g., 'sympy/sympy')")
-
-
 class NewSWETaskInput(BaseModel):
     data: SWEBenchTaskInput
 
@@ -122,21 +117,30 @@ class NewSWETaskInput(BaseModel):
 class SWEAgent(Agent):
 
     sandbox: Sandbox
+    mcp_tools: dict[str, Any]
 
-    def sandbox_term(self, code: str) -> tuple[str, bool]:
+    def sandbox_term(self, code: str) -> tuple[str, str]:
+
+#        status, value, output = self.sandbox.run(code + "\n")
+#        return (output, False)
 
         lines = code.split("\n")
         while lines and lines[-1].strip() == "":
             lines.pop()
+        result = ""
+        final = ""
         for line in lines:
             status, value, output = self.sandbox.run(line)
+            result += f"{output}\n"
             if status != "ok":
+                result += f"[{status}] {value}\n"
+                if status == "final_answer":
+                    final = value
                 break
 
-        self.sandbox = Sandbox(SandboxConfig(), tools={})
-        if status == "final_answer":
-            return (output, True)
-        return (output, False)
+        self.sandbox.stop()
+        self.sandbox = Sandbox(SandboxConfig(), tools=self.mcp_tools)
+        return (result, final)
 
     def create_prompt(self) -> str:
         if self.exec_result:
@@ -148,43 +152,61 @@ class SWEAgent(Agent):
     def check_solution(self) -> tuple[bool, str]:
         return (True, "no error")
 
-def create_mbpp_agent(*, task_file: str, output: str = "swebench_solution.json",
+def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
+                      *, output: str = "swebench_solution.json",
                       providers_file: str = "config/swe_providers.json",
                       provider_url: str = "", model_name: str = ""
-                      ) -> tuple[SWEAgent, SWEBenchTaskInput]:
+                      ) -> SWEAgent:
 
-    with open(task_file, "r") as file:
-        mbpp_data = json.load(file)
-    task = NewSWETaskInput(data=mbpp_data).data
+    client = McpClient(command=client_command)
+    config = SandboxConfig()
+    manual= build_manual(config, client.specs, client.resources, client.prompts)
 
     pr = SWEBasePrompts.get_first_prompts(
         task.repo,
         task.problem_statement,
-        task.hints_text
-        # eval_script ??
+        task.hints_text,
+        manual
     )
     system_prompt, user_prompt = pr
     prompt = MemoryPrompt(system_prompt, user_prompt, SWEBasePrompts.get_first_objective())
     llmapi = LlmApi(providers_file, provider_url, model_name)
-    sandbox = Sandbox(SandboxConfig(), tools={})
 
+    sandbox = Sandbox(SandboxConfig(), tools=client.tools)
     agent = SWEAgent(
         task_id=task.instance_id, benchmark="swebench",
         system_prompt=system_prompt, output_path=output,
         llmapi=llmapi,
         prompt=prompt,
+        mcp_tools=client.tools,
         sandbox=sandbox
     )
-    return (agent, task)
+    return agent
+
 
 def main(*args: Any, **kwargs: Any) -> None:
 
-    agent, task = create_mbpp_agent(**kwargs)
-    server = server_docker(task, python="python3.10")
-    server.start()
+    with open(kwargs.pop("task_file"), "r") as file:
+        mbpp_data = json.load(file)
+    task = NewSWETaskInput(data=mbpp_data).data
 
-    check = True
-    while check:
-        check = agent.next_step()
-        check = False
-    agent.create_output()
+    with DockerTestbed(task.docker_image, python="python") as testbed:
+        if not testbed.has_image():
+            print("[image] pulling, this takes a few minutes...")
+        testbed.setup(eval_script=task.eval_script)
+        print(f"[container] {testbed.container.id[:12]} started")
+        try:
+            agent = create_mbpp_agent(testbed.mcp_command(), task, **kwargs)
+            check = True
+            while check:
+                check = agent.next_step()
+                check = False
+            agent.create_output()
+        except Exception:
+            raise
+        finally:
+            try:
+                agent.sandbox.stop()
+            except Exception:
+                pass
+    print("[container] removed")
