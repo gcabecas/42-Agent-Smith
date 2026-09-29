@@ -29,7 +29,10 @@ class SWEBasePrompts:
 
     @classmethod
     def get_aftercode_prompt(cls, sandbox_output: str) -> str:
-        out = f"[sandbox result]:\n{sandbox_output}\n[note]: If the code encounter a failure find a new solution !"
+        out =(
+            f"[sandbox result]:\n{sandbox_output}\n[note]: If the code encounter a failure find a new solution !"
+            " If you found a very important information save it with the apropriate tool. Otherwise continue investigate with tools"
+        )
         return out
 
     @classmethod
@@ -39,7 +42,7 @@ class SWEBasePrompts:
 
     @classmethod
     def get_first_objective(cls) -> str:
-        out = "Find a new current objective or resolve the main one directly"
+        out = "Find a new current objective to resolve the main one"
         return out
 
     @classmethod
@@ -47,23 +50,24 @@ class SWEBasePrompts:
                                 hints_text: list[str]) -> tuple[str, str]:
 
         system_prompt = (
-            "You are a python coding agent "
-            "specialised to resolve MBPP problems. "
-            "You need to resolve Mostly Basic Python Problems. "
-            "Create the function demanded by the user with the associed requirements all in python. "
-            "Only code is important the user will not read your comments.\n"
-            "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
+            "You are a Software Engineering coding agent"
+            "specialised to resolve SWE bench problems. "
+            "You need to resolve git repository problems. "
+            "For this use available tools inside a python sandbox to investigate and resolve the given problem"
+            "Only tools usage is important the user will not read your comments.\n"
+            "You are in a fully automated pipeline, all the pyhton code you give is used in a sandbox and the output is returned by the user. "
             "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
-            "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
+            "Code executed in the sandbox have direct access to MCP-Tools functions, theses functions can interact with the git environemnt.\n"
             "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
             "Do not use python code block inside python code block !\n"
             "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
-            "```python\nfinal_answer(code: str)\n```\n"
-            "For more you have important specials functions to manage your memory, helping for problem researchs and flaw tracking:\n"
+            "```python\nfinal_answer(git_diff: str)\n```\n"
+            "For more you have very important specials functions to manage your memory, helping for investigating, problem researchs and flaw tracking:\n"
             "```python\nset_new_current_objective(self, msg: str, old_objective_status: str)\n```\n"
             "```python\nadd_main_objective_hint(msg: str)\n```\n"
             "```python\nadd_current_objective_hint(msg: str)\n```\n"
-            "Theses functions have automated XML management\n"
+            "Theses functions have automated xml management.\n"
+            "THESES FUNCTION ASSURE PROMPT SAFETY AND DATA SAVING !\n"
         )
         command = ["uv", "run", "sandbox", "--manual",
                    "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
