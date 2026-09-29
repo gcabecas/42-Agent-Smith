@@ -20,8 +20,8 @@ def parse_args() -> argparse.Namespace:
 
 
 class server_docker():
-    def __init__(self, task: str, python: str = "python") -> None:
-        self.tasks = SWEBenchTaskInput(**json.loads(Path(task).read_text()))
+    def __init__(self, task: SWEBenchTaskInput, python: str = "python") -> None:
+        self.tasks = task
         self.python = python
         self.testbed = DockerTestbed(self.tasks.docker_image, python=self.python)
 

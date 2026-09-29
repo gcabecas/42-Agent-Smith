@@ -3,6 +3,7 @@ import subprocess
 from typing import Any
 import json
 from pydantic import BaseModel, Field
+import pexpect
 
 from src.agent.agent import Agent
 from src.agent.helpers import Log, LlmApi, MemoryPrompt
@@ -95,6 +96,43 @@ class NewMBPPTaskInput(BaseModel):
 class MBPPAgent(Agent):
 
     test_list: list[str]
+    sandbox_cmd: list[str]
+
+    def sandbox_term(self, code: str) -> tuple[str, bool]:
+
+        result = ""
+        term = pexpect.spawn(self.sandbox_cmd[0],
+                             self.sandbox_cmd[1:], encoding="utf-8")
+        lines = code.split("\n")
+        while lines and lines[-1].strip() == "":
+            lines.pop()
+        try:
+            term.setecho(True)
+            term.expect_exact([">>> ", "... "])
+            result += term.after
+            for line in lines:
+                term.sendline(line)
+                term.expect_exact(
+                    ["\n>>> ", "\n... ", "\n[error] ", "\n[final_answer] ."])
+                result += term.before + term.after
+                if term.after.startswith("\n[error] "):
+                    term.sendline("")
+                    term.expect_exact(["\n>>> ", "\n... "])
+                    result += term.before
+                    break
+                if term.after.startswith("\n[final_answer] ."):
+                    break
+            term.sendline("")
+            term.sendline("exit")
+        except Exception:
+            raise
+        finally:
+            term.terminate(force=True)
+        read = result.replace("\r\n", "\n")
+
+        if read.rstrip().endswith("[final_answer] ."):
+            return (read, True)
+        return (read, False)
 
     def create_prompt(self) -> str:
         if self.exec_result:

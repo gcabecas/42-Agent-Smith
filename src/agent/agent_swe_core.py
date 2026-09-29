@@ -4,8 +4,11 @@ from typing import Any
 import json
 from pydantic import BaseModel, Field
 
+from src.common.models import SandboxConfig, SWEBenchTaskInput
+from src.sandbox.execute import Sandbox
 from src.agent.agent import Agent
-from src.agent.helpers import Log, LlmApi, MemoryPrompt
+from src.agent.helpers import LlmApi, MemoryPrompt
+from src.swebench.server_docker import server_docker
 
 
 """ SWE
@@ -70,7 +73,7 @@ class SWEBasePrompts:
             "THESES FUNCTION ASSURE PROMPT SAFETY AND DATA SAVING !\n"
         )
         command = ["uv", "run", "sandbox", "--manual",
-                   "--mcp-stdio", "uv run python mcp_tools_swebench.py"]
+                   "--mcp-server", "http://localhost:8042"]
         result = subprocess.run(
             command,
             cwd=".",
@@ -93,23 +96,23 @@ class SWEBasePrompts:
         return (system_prompt, user_prompt)
 
 
-class SWEBenchTaskInput(BaseModel):
-    """Input for a SWE-bench task, provided by the moulinette.
-    Your agent receives this and must produce a git patch that fixes
-    the issue.
-    """
-    instance_id: str = Field(
-        ..., description="SWE-bench instance identifier (e.g., 'sympy__sympy-23534')")
-    problem_statement: str = Field(
-        ..., description="The GitHub issue description, what needs to be fixed")
-    docker_image: str = Field(
-        ..., description="Full Docker image name to pull (e.g., 'swebench/sweb.eval.x86_64. sympy_1776_sympy-23534:latest')")
-    eval_script: str = Field(
-        ..., description="Bash script to run inside the container to evaluate the patch")
-    hints_text: str = Field(
-        default="", description="Optional hints about the issue (may be empty)")
-    repo: str = Field(
-        default="", description="Repository name (e.g., 'sympy/sympy')")
+#class SWEBenchTaskInput(BaseModel):
+#    """Input for a SWE-bench task, provided by the moulinette.
+#    Your agent receives this and must produce a git patch that fixes
+#    the issue.
+#    """
+#    instance_id: str = Field(
+#        ..., description="SWE-bench instance identifier (e.g., 'sympy__sympy-23534')")
+#    problem_statement: str = Field(
+#        ..., description="The GitHub issue description, what needs to be fixed")
+#    docker_image: str = Field(
+#        ..., description="Full Docker image name to pull (e.g., 'swebench/sweb.eval.x86_64. sympy_1776_sympy-23534:latest')")
+#    eval_script: str = Field(
+#        ..., description="Bash script to run inside the container to evaluate the patch")
+#    hints_text: str = Field(
+#        default="", description="Optional hints about the issue (may be empty)")
+#    repo: str = Field(
+#        default="", description="Repository name (e.g., 'sympy/sympy')")
 
 
 class NewSWETaskInput(BaseModel):
@@ -117,6 +120,23 @@ class NewSWETaskInput(BaseModel):
 
 
 class SWEAgent(Agent):
+
+    sandbox: Sandbox
+
+    def sandbox_term(self, code: str) -> tuple[str, bool]:
+
+        lines = code.split("\n")
+        while lines and lines[-1].strip() == "":
+            lines.pop()
+        for line in lines:
+            status, value, output = self.sandbox.run(line)
+            if status != "ok":
+                break
+
+        self.sandbox = Sandbox(SandboxConfig(), tools={})
+        if status == "final_answer":
+            return (output, True)
+        return (output, False)
 
     def create_prompt(self) -> str:
         if self.exec_result:
@@ -126,18 +146,7 @@ class SWEAgent(Agent):
         return out
 
     def check_solution(self) -> tuple[bool, str]:
-
-        # TODO use arguments in a json file
-#        command = ["uv", "run", "sandbox", "--mcp-server",
-#                   "http://127.0.0.1:8042"]
-#        code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
-#        read = self.sandbox_term(command, code)
-        read = "error"
-    
-        if "[error]" in read:
-            return (False, read)
         return (True, "no error")
-
 
 def create_mbpp_agent(*, task_file: str, output: str = "swebench_solution.json",
                       providers_file: str = "config/swe_providers.json",
@@ -157,45 +166,25 @@ def create_mbpp_agent(*, task_file: str, output: str = "swebench_solution.json",
     system_prompt, user_prompt = pr
     prompt = MemoryPrompt(system_prompt, user_prompt, SWEBasePrompts.get_first_objective())
     llmapi = LlmApi(providers_file, provider_url, model_name)
+    sandbox = Sandbox(SandboxConfig(), tools={})
 
-    command = ["uv", "run", "sandbox", "--mcp-server",
-                "http://127.0.0.1:8042"]
     agent = SWEAgent(
         task_id=task.instance_id, benchmark="swebench",
         system_prompt=system_prompt, output_path=output,
         llmapi=llmapi,
         prompt=prompt,
-        sandbox_cmd=command
+        sandbox=sandbox
     )
     return (agent, task)
-
-
-from src.sandbox.mcp_client import McpClient
-from src.swebench.testbed import DockerTestbed
-
 
 def main(*args: Any, **kwargs: Any) -> None:
 
     agent, task = create_mbpp_agent(**kwargs)
-    print(f"[task] {task.instance_id} ({task.repo})")
-    print(f"[image] {task.docker_image}")
+    server = server_docker(task, python="python3.10")
+    server.start()
 
-    with DockerTestbed(task.docker_image, {"8042/tcp": ("127.0.0.1", 8042)}) as testbed:
-        if not testbed.has_image():
-            print("[image] pulling, this takes a few minutes...")
-        testbed.setup(eval_script=task.eval_script)
-        print(f"[container] {testbed.container.id[:12]} started")
-        client = McpClient(command=testbed.mcp_command())
-        print(f"[tools] {', '.join(client.tools)}")
-
-        check = True
-        while check:
-            check = agent.next_step()
-            check = False
-        agent.create_output()
-
-    print("[container] removed")
-
-
-if __name__ == "__main__":
-    main()
+    check = True
+    while check:
+        check = agent.next_step()
+        check = False
+    agent.create_output()

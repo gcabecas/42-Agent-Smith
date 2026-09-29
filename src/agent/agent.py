@@ -2,7 +2,6 @@
 from pydantic import BaseModel, Field
 import sys
 from typing import Optional
-import pexpect
 from datetime import datetime
 
 from src.agent.helpers import LlmApi, MemoryPrompt
@@ -85,7 +84,6 @@ class Agent(SolutionOutput):
     init: bool = False
     start: datetime = datetime.now()
     imports: str = ""
-    sandbox_cmd: list[str]
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -106,38 +104,6 @@ class Agent(SolutionOutput):
         print("[ PROMPT: ]")
         for elem in self.prompt.messages:
             print(elem)
-
-    def sandbox_term(self, code: str) -> str:
-
-        result = ""
-        term = pexpect.spawn(self.sandbox_cmd[0],
-                             self.sandbox_cmd[1:], encoding="utf-8")
-        lines = code.split("\n")
-        while lines and lines[-1].strip() == "":
-            lines.pop()
-        try:
-            term.setecho(True)
-            term.expect_exact([">>> ", "... "])
-            result += term.after
-            for line in lines:
-                term.sendline(line)
-                term.expect_exact(
-                    ["\n>>> ", "\n... ", "\n[error] ", "\n[final_answer] ."])
-                result += term.before + term.after
-                if term.after.startswith("\n[error] "):
-                    term.sendline("")
-                    term.expect_exact(["\n>>> ", "\n... "])
-                    result += term.before
-                    break
-                if term.after.startswith("\n[final_answer] ."):
-                    break
-            term.sendline("")
-            term.sendline("exit")
-        except Exception:
-            raise
-        finally:
-            term.terminate(force=True)
-        return result.replace("\r\n", "\n")
 
     def next_step(self) -> bool:
 
@@ -168,14 +134,15 @@ class Agent(SolutionOutput):
 
         self.exec_result = ""
         out = []
-        for i, code in enumerate(codes, 1):
-            code = f"{self.imports}\n{code}"
-            read = self.sandbox_term(code)
+        for i, stop in enumerate(codes, 1):
+            if self.imports:
+                code = f"{self.imports}\n{code}"
+            read, end = self.sandbox_term(code)
             out.append(read)
             new.sandbox_input += f"[code block: {i}]\n{code}\n"
             new.sandbox_output += f"[code block: {i}]\n{read}\n"
 
-            if read.rstrip().endswith("[final_answer] ."):
+            if stop:
                 self.solution = read.split("[final_answer] ")[1]
                 self.set_step_data(new, resp, start)
                 return False

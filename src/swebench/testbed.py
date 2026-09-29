@@ -27,7 +27,6 @@ class DockerTestbed:
     def __init__(
         self,
         image: str,
-        ports: dict[str, int],
         workdir: str = "/testbed",
         server_dir: str = "/agent",
         python: str = "python",
@@ -41,7 +40,6 @@ class DockerTestbed:
         self.eval_path = eval_path
         self.container: Any = None
         self._previous_handler: Any = signal.SIG_DFL
-        self.ports=ports
 
     def has_image(self) -> bool:
         try:
@@ -61,7 +59,6 @@ class DockerTestbed:
             image=self.image,
             command=["tail", "-f", "/dev/null"],
             detach=True,
-            ports=self.ports
         )
         try:
             self.container.start()
