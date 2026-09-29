@@ -8,6 +8,8 @@ from src.sandbox.manual import build_manual
 from src.sandbox.mcp_client import McpClient
 from src.swebench.testbed import DockerTestbed
 
+from src.sandbox.execute import Sandbox
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="src.swebench")
@@ -17,31 +19,31 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    task = SWEBenchTaskInput(**json.loads(Path(args.task_file).read_text()))
-    print(f"[task] {task.instance_id} ({task.repo})")
-    print(f"[image] {task.docker_image}")
+class server_docker():
+    def __init__(self, task: str, python: str = "python") -> None:
+        self.tasks = SWEBenchTaskInput(**json.loads(Path(task).read_text()))
+        self.python = python
+        self.testbed = DockerTestbed(self.tasks.docker_image, python=self.python)
 
-    with DockerTestbed(task.docker_image, {"8042/tcp": ("127.0.0.1", 8042)}, python=args.python) as testbed:
-        if not testbed.has_image():
+    def start(self) -> None:
+        if not self.testbed.has_image():
             print("[image] pulling, this takes a few minutes...")
-        testbed.setup(eval_script=task.eval_script)
-        print(f"[container] {testbed.container.id[:12]} started")
-        print(f"[python] {args.python}")
+        self.testbed.setup(eval_script=self.tasks.eval_script)
+        print(f"[container] {self.testbed.container.id[:12]} started")
+        print(f"[python] {self.python}")
 
-        client = McpClient(command=testbed.mcp_command())
-        print(f"[tools] {', '.join(client.tools)}")
 
-        config = SandboxConfig()
-        if args.manual:
-            print(build_manual(config, client.specs,
-                               client.resources, client.prompts))
-        else:
-            repl(config, client.tools)
+def main() -> None:
 
-    print("[container] removed")
+    server = server_docker("swe_task.json", python="python3.10")
+    server.start()
+    sandbox = Sandbox(SandboxConfig(), tools={})
 
+    # status, value, output = sandbox.run("print('Hello, World!')") # code llm a la place du hello world
+    # if output:
+    #     print(output, end="")
+    # if status != "ok":
+    #     print(f"[{status}] {value}")
 
 if __name__ == "__main__":
     main()
