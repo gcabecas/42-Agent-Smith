@@ -8,45 +8,41 @@ from dotenv import load_dotenv
 import re
 
 
-class Log:
-    logs: str = ""
-    log: dict[str, str] = dict()
+def set_file_name(path: str, extension: str) -> str:
+    """ choose the file name dependig of existing files """
+    from pathlib import Path
+    from os.path import exists
 
-    @classmethod
-    def add_logs(cls, add: str) -> None:
-        cls.logs += f"{add}\n"
-
-    @classmethod
-    def get_logs(cls) -> str:
-        return cls.logs
-
-    @classmethod
-    def print_logs(cls) -> None:
-        print(cls.logs, file=sys.stderr)
-
-    @classmethod
-    def add_log(cls, add: str, log_type: str) -> None:
-        if cls.log.get(log_type):
-            cls.log[log_type] += f"{add}\n"
+    Path(Path(path).parent).mkdir(parents=True, exist_ok=True)
+    while 1:
+        if exists(path):
+            s_case = path.removesuffix(extension).split('_')
+            sn_case = s_case[-1]
+            if sn_case.isdigit():
+                s = f"{'_'.join(s_case[:-1])}_{int(sn_case) + 1}" + extension
+                path = s
+            else:
+                path = path.removesuffix(extension) + "_1" + extension
         else:
-            cls.log[log_type] = f"{add}\n"
+            break
+    return path
+
+
+class Log:
+    save_path = set_file_name("logs/log.txt", ".txt")
 
     @classmethod
-    def get_log(cls, log_type) -> str:
-        return cls.log[log_type]
+    def print(cls, *args) -> None:
+        try:
+            with open(cls.save_path, "a") as f_open:
+                for elem in args:
+                    print(elem, file=sys.stderr)
+                    f_open.write(str(elem) + "\n")
+        except Exception as e:
+            print(f"Logging Error ! : {e}", file=sys.stderr)
+            
 
-    @classmethod
-    def get_all_log(cls) -> dict[str, str]:
-        return cls.log
-
-    @classmethod
-    def print_log(cls, log_type: str) -> None:
-        print(cls.log[log_type], file=sys.stderr)
-
-    @classmethod
-    def print_all_log(cls) -> None:
-        print(cls.log, file=sys.stderr)
-
+        
 
 class LlmApiError(Exception):
     pass
@@ -121,6 +117,7 @@ class LlmApi:
                 response = self.urls[self.iurl]["client"].chat.completions.create(
                     **params)
                 return {
+                    "llm_input": msg[-1]["content"],
                     "llm_output": response.choices[0].message.content,
                     "input_tokens": response.usage.prompt_tokens,
                     "output_tokens": response.usage.completion_tokens,
@@ -168,13 +165,20 @@ class MemoryPromptSave(Exception):
 
 class MemoryPrompt:
 
+    _new_data: dict[str, Any] = dict()
+
+    @classmethod
+    def _get_new_prompt_data(cls) -> dict[str, Any]:
+        return cls._new_data
+
     @classmethod
     def load_data(cls, data: dict[str, Any]) -> None:
         for key, elem in data.items():
             setattr(cls, key, elem)
+        cls._new_data = dict()
 
     @classmethod
-    def raise_data(cls) -> None:
+    def save_data(cls) -> None:
         data = {
             "messages": cls.messages,
             "memory_mode": cls.memory_mode,
@@ -185,7 +189,7 @@ class MemoryPrompt:
             "main_hints": cls.main_hints,
             "current_hints": cls.current_hints
         }
-        raise MemoryPromptSave(data)
+        cls._new_data = data
 
     @classmethod
     def init(cls, base_prompt_system: str, base_prompt_user: str, launch_objective: str = "") -> None:
@@ -220,7 +224,8 @@ class MemoryPrompt:
         cls.main_hints.append(msg)
         cls.add_message(msg)
 
-        cls.raise_data()
+        print("main ojective hint saved")
+        cls.save_data()
 
     # Spceial Method usable by the llm
     @classmethod
@@ -232,11 +237,14 @@ class MemoryPrompt:
         cls.current_hints[-1].append(msg)
         cls.add_message(msg)
 
-        cls.raise_data()
+        print("current ojective hint saved")
+        cls.save_data()
 
     # Spceial Method usable by the llm
     @classmethod
     def set_new_current_objective(cls, objective: str, previous_current_objective_status: str) -> None:
+        if objective == cls.current_objective:
+            return
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
@@ -248,12 +256,9 @@ class MemoryPrompt:
         new_objective = f"<CURRENT_OBJECTIVE>\n{objective}\n</CURRENT_OBJECTIVE>"
         cls.current_hints.append([new_objective])
         cls.add_message(new_objective)
-
-        print("wtf dude")
-        for elem in cls.messages:
-            print(elem)
-
-        cls.raise_data()
+        
+        print("new current ojective saved")
+        cls.save_data()
 
     # if len(all_memory) > cls.max + len(important_memory) ...
     # if len(all_memory) > cls.true_max ...

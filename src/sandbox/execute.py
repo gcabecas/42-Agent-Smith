@@ -15,7 +15,7 @@ from src.sandbox.security.builtins import SAFE_BUILTINS
 from src.sandbox.security.filesystem import restricted_open
 from src.sandbox.security.imports import restricted_import
 from src.sandbox.security.network import block_network
-from src.agent.helpers import MemoryPrompt, MemoryPromptSave
+from src.agent.helpers import MemoryPrompt
 
 MAX_OUTPUT_CHARS = 10_000
 
@@ -55,16 +55,16 @@ def _run_one(code: str, namespace: dict[str, Any],
     ):
         try:
             exec(_compile(code), namespace)
-            return ("ok", None)
-        except MemoryPromptSave as e:
-            return ("ok", e.data)
+            return ("ok", None, namespace["__builtins__"]["_get_new_prompt_data"]())
         except FinalAnswer as e:
-            return ("final_answer", e.value)
+            return ("final_answer", e.value, namespace["__builtins__"]["_get_new_prompt_data"]())
         except Exception as e:
             name = type(e).__name__
             message = f"{name}: {e}" if str(e) else name
             line = _error_line(e)
-            return ("error", f"{message} (line {line})" if line else message)
+            return ("error",
+                    f"{message} (line {line})" if line else message,
+                    namespace["__builtins__"]["_get_new_prompt_data"]())
 
 
 def _loop(pipe: Connection, config: SandboxConfig,
@@ -83,6 +83,7 @@ def _loop(pipe: Connection, config: SandboxConfig,
     exec_builtins["set_new_current_objective"] = MemoryPrompt.set_new_current_objective
     exec_builtins["add_main_objective_hint"] = MemoryPrompt.add_main_objective_hint
     exec_builtins["add_current_objective_hint"] = MemoryPrompt.add_current_objective_hint
+    exec_builtins["_get_new_prompt_data"] = MemoryPrompt._get_new_prompt_data
 
     for name in tool_names:
         exec_builtins[name] = partial(_call_tool, name, pipe)
@@ -126,10 +127,9 @@ class Sandbox:
 
     def run(self, code: str) -> Result:
         self.pipe.send(code)
-        status, value = self._wait_for_result()
-        if status == "ok" and value:
-            MemoryPrompt.load_data(value)
-            value = None
+        status, value, prompt_data = self._wait_for_result()
+        if prompt_data:
+            MemoryPrompt.load_data(prompt_data)
 
         with open(self.output_path) as output_file:
             output = output_file.read(MAX_OUTPUT_CHARS + 1)
@@ -138,7 +138,7 @@ class Sandbox:
                       + f"\n[output truncated to {MAX_OUTPUT_CHARS} chars]\n")
         return Result(status, value, output)
 
-    def _wait_for_result(self) -> tuple[str, str | None]:
+    def _wait_for_result(self) -> tuple[str, str | None, dict[str, Any]]:
         timeout = self.config.max_execution_time_seconds
         remaining = float(timeout)
         sentinel = self.process.sentinel
@@ -153,18 +153,20 @@ class Sandbox:
                 self._restart()
                 return ("interrupted",
                         "sandbox process terminated (KeyboardInterrupt "
-                        "or SystemExit), sandbox restarted, namespace reset")
+                        "or SystemExit), sandbox restarted, namespace reset",
+                        dict())
             elif self.pipe in ready:
                 message = self.pipe.recv()
                 if message[0] != "tool_call":
-                    return (message[0], message[1])
+                    return (message[0], message[1], message[2])
                 name, args, kwargs = message[1]
                 self.pipe.send(self._invoke_tool(name, args, kwargs))
             else:
                 self._restart()
                 return ("timeout",
                         f"execution timed out after {timeout}s, output may "
-                        "be partial, sandbox restarted, namespace reset")
+                        "be partial, sandbox restarted, namespace reset",
+                        dict())
 
     def _invoke_tool(self, name: str, args: tuple[Any, ...],
                      kwargs: dict[str, Any]) -> tuple[bool, Any]:

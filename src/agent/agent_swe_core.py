@@ -54,15 +54,22 @@ class SWEBasePrompts:
 
     @classmethod
     def get_aftercode_prompt(cls, sandbox_output: str) -> str:
-        out =(
-            f"[sandbox result]:\n{sandbox_output}\n[note]: If the code encounter a failure find a new solution !"
-            " If you found a very important information save it with the apropriate tool. Otherwise continue investigate with tools"
-        )
+        info = sandbox_output.strip()
+        if info:
+            out =(
+                f"[sandbox output]:(\n{info}\n"
+                ")\n\n"
+                "If the sandbox output is empty or encounter an error try something different. "
+                "If you found a very important information save it with the apropriate tool. "
+                "Otherwise continue investigate with tools or end the process with final_answer"
+            )
+        else:
+            out = "Your code was executed, but no print occured"
         return out
 
     @classmethod
     def get_nocode_prompt(cls) -> str:
-        out = "Now you thought about the problem, use tools and eventually code to continue the searches\n"
+        out = "Now you thought about the problem, use tools and eventually code to continue the searchs\n"
         return out
 
     @classmethod
@@ -78,29 +85,44 @@ class SWEBasePrompts:
             "You are a Software Engineering coding agent"
             "specialised to resolve SWE bench problems. "
             "You need to resolve git repository problems. "
-            "For this use available tools inside a python sandbox to investigate and resolve the given problem"
-            "Only tools usage is important the user will not read your comments.\n"
+            "You are in a isolated environment, you have only access to a python sandbox and tools usable inside it to acquire data. "
+            "Investigate and resolve the given problem "
+            "Sandbox tools usage is very important, they give you access to the environemnent you have to debug. "
+            "You have to modifie directly files. It is entirely up to you to resolve the problem !\n"
             "You are in a fully automated pipeline, all the pyhton code you give is used in a sandbox and the output is returned by the user. "
+            "The user will not read your comments.\n"
             "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
+            "Warning the sandbox is just a test lab not a part of the problem to resolve.\n"
             "Code executed in the sandbox have direct access to MCP-Tools functions, theses functions can interact with the git environemnt.\n"
+            "Be smart and wait the result of your message to advise what to do next.\n"
+
             "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
             "Do not use python code block inside python code block !\n"
-            "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
-            "```python\nfinal_answer(git_diff: str)\n```\n"
+            "ONLY YOUR FIRST CODE BLOCK WILL BE EXECUTED !\n"
+            "PLEASE WAIT YOUR EXECUTION RESULT TO GO TO THE NEXT STEP !\n"
+
+            "IF YOU ENDED RESOLVING USE THE FOLLOWING FUNCTION :\n"
+            "final_answer(git_diff: str)\n"
+            "Usage exemple:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff())\n```\n"
+            "Here git_diff is the print given by the command git diff, use another tool to get it !"
+
             "For more you have very important specials functions to manage your memory, helping for investigating, problem researchs and flaw tracking:\n"
             "```python\nset_new_current_objective(objective: str, previous_current_objective_status: str)\n```\n"
             "```python\nadd_main_objective_hint(msg: str)\n```\n"
             "```python\nadd_current_objective_hint(msg: str)\n```\n"
             "Theses functions have automated xml management.\n"
-            "Warning ! Theses functions stop the code block execution !\n"
-            "THESES FUNCTION ASSURE PROMPT SAFETY AND DATA SAVING !\n"
+            "THESES FUNCTIONS ASSURE PROMPT SAFETY AND DATA SAVING !\n"
+            "Set only large or focused-important current objective\n"
         )
-        system_prompt += "<SANDBOX_RULES>\n" + \
-            str(manual) + "\n</SANDBOX_RULES>\n"
-
+        system_prompt += (
+                    "<SANDBOX_RULES>\n" + "USE NEXT TOOLS TO INVESTIGATE !\n"
+                    f"{manual}\n</SANDBOX_RULES>\n"
+        )
         user_prompt = (
             "<MAIN_OBJECTIVE>\n"
-            f"You need to resolve the following problem statement:\n"
+            f"Use sandbox tools to access the bugged environement. Use tools to modifie directly files if needed. "
+            "It is entirely up to you to resolve the problem !\n"
+            "You need to resolve the following problem statement:\n"
             f"{problem_statement}\n"
             "</MAIN_OBJECTIVE>\n"
         )
@@ -130,7 +152,7 @@ class SWEAgent(Agent):
         final = ""
         for line in lines:
             status, value, output = self.sandbox.run(line)
-            result += f"{output}\n"
+            result += f"{line}\n{output}\n"
             if status != "ok":
                 result += f"[{status}] {value}\n"
                 if status == "final_answer":
