@@ -122,13 +122,28 @@ class Agent(SolutionOutput):
         else:
             self.init = True
 
-        DEBUG = False
+        DEBUG = True
         global NDEBUG
         NDEBUG += 1
         if DEBUG:  # TODO debug if
             resp = {  # TODO
                     "llm_input": prompt,
-                    "llm_output": "```python\nset_new_current_objective('Investigate the error in the vector addition operation', 'Not started')\n```\n",
+                    "llm_output": """```python
+class Vector:
+    def __init__(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
+
+    def __add__(self, other):
+        if isinstance(other, Vector):
+            return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
+        else:
+            raise TypeError('Operands must be of type Vector')
+
+N = Vector(1, 0, 0)
+sum([N, Vector(0, 0, 0)])
+```""",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "api_url": "no url",
@@ -164,7 +179,7 @@ class Agent(SolutionOutput):
 
         self.set_step_data(new, resp, start)
 
-        if DEBUG and NDEBUG == 4:
+        if DEBUG and NDEBUG == 4:  # TODO
             return False
         else:
             return True

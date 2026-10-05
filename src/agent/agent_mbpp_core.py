@@ -29,7 +29,16 @@ class MBPPBasePrompts:
 
     @classmethod
     def get_aftercode_prompt(cls, sandbox_output: str) -> str:
-        out = f"[sandbox result]:\n{sandbox_output}\n[note]: If the code encounter a failure find a new solution !"
+        info = sandbox_output.strip()
+        if info:
+            out =(
+                f"[sandbox output]:(\n{info}\n"
+                ")\n\n"
+                "If the sandbox output is empty or encounter an error try something different ! "
+                "Otherwise continue investigate with test code and eventual tools or end the process with final_answer"
+            )
+        else:
+            out = "Your code was executed, but no print occured"
         return out
 
     @classmethod
@@ -49,9 +58,12 @@ class MBPPBasePrompts:
             "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
             "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
             "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
+            "ONLY YOUR FIRST CODE BLOCK WILL BE EXECUTED !\n"
+            "Be smart and wait the result of your message to advise what to do next.\n"
             "Do not use python code block inside python code block !\n"
             "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
             "```python\nfinal_answer(code: str)\n```\n"
+            "Use final_answer if the code pass tests.\n"
         )
         command = ["uv", "run", "sandbox", "--manual",
                    "--mcp-stdio", "uv run python mcp_tools_mbpp.py"]
@@ -148,17 +160,14 @@ class MBPPAgent(Agent):
         for elem in self.test_list:
             asserts += f"\n\n{elem}"
 
-        # TODO use arguments in a json file
-        command = ["uv", "run", "sandbox", "--mcp-stdio",
-                   "uv run python mcp_tools_mbpp.py"]
         code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
-        read = self.sandbox_term(command, code)
+        read = self.sandbox_term(code)
         if "[error]" in read:
             return (False, read)
         return (True, "no error")
 
 
-def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
+def create_mbpp_agent(task_file: str, output: str = "mbpp_solution.json",
                       providers_file: str = "config/mbpp_providers.json",
                       provider_url: str = "", model_name: str = "") -> MBPPAgent:
 
@@ -188,8 +197,23 @@ def create_mbpp_agent(*, task_file: str, output: str = "mbpp_solution.json",
     return agent
 
 
-def main(*args: Any, **kwargs: Any) -> None:
-    agent = create_mbpp_agent(**kwargs)
+def main(*, task_file: str, output: str = "mbpp_solution.json",
+                      providers_file: str = "config/mbpp_providers.json",
+                      provider_url: str = "", model_name: str = "") -> None:
+
+    """ MBPP Agent.
+        Args:
+            task_file: mbpp task file
+            output: output file name
+            providers_file: json file of providers with llms and keys api names
+            provider_url: default provider to use (need model_name)
+            model_name: default model to use (need provider_url)
+
+    """
+
+    agent = create_mbpp_agent(
+                            task_file, output, providers_file,
+                            provider_url, model_name)
     check = True
     while check:
         check = agent.next_step()

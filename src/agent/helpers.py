@@ -42,8 +42,6 @@ class Log:
             print(f"Logging Error ! : {e}", file=sys.stderr)
             
 
-        
-
 class LlmApiError(Exception):
     pass
 

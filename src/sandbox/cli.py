@@ -1,7 +1,7 @@
 import argparse
 import codeop
 import sys
-from typing import Any, Callable
+from typing import Any, Callable, Generator
 
 from src.common.models import SandboxConfig
 from src.sandbox.config import load_config
@@ -33,6 +33,22 @@ def read_entry() -> str | None:
     while True:
         try:
             lines.append(input("... " if lines else ">>> "))
+        except EOFError:
+            print()
+            return None
+
+        source = "\n".join(lines)
+        if _is_complete(source):
+            return source
+
+
+def read_entry_from_python() -> Generator[None, str, str | None]:
+    lines: list[str] = []
+
+    while True:
+        data = yield
+        try:
+            lines.append(str(data))
         except EOFError:
             print()
             return None

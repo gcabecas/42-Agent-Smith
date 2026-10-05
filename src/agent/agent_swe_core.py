@@ -11,7 +11,9 @@ from src.agent.helpers import LlmApi, MemoryPrompt
 from src.swebench.server_docker import server_docker
 from src.sandbox.mcp_client import McpClient
 from src.sandbox.manual import build_manual
+from src.sandbox.cli import read_entry_from_python
 from src.swebench.testbed import DockerTestbed
+
 
 
 #class SWEBenchTaskInput(BaseModel):
@@ -59,7 +61,7 @@ class SWEBasePrompts:
             out =(
                 f"[sandbox output]:(\n{info}\n"
                 ")\n\n"
-                "If the sandbox output is empty or encounter an error try something different. "
+                "IF THE SANDBOX OUTPUT IS EMPTY OR ENCOUNTER AN ERROR TRY SOMETHING DIFFERENT ! "
                 "If you found a very important information save it with the apropriate tool. "
                 "Otherwise continue investigate with tools or end the process with final_answer"
             )
@@ -82,6 +84,7 @@ class SWEBasePrompts:
                                 hints_text: list[str], manual: str) -> tuple[str, str]:
 
         system_prompt = (
+# Base
             "You are a Software Engineering coding agent"
             "specialised to resolve SWE bench problems. "
             "You need to resolve git repository problems. "
@@ -95,14 +98,15 @@ class SWEBasePrompts:
             "Warning the sandbox is just a test lab not a part of the problem to resolve.\n"
             "Code executed in the sandbox have direct access to MCP-Tools functions, theses functions can interact with the git environemnt.\n"
             "Be smart and wait the result of your message to advise what to do next.\n"
-
+# Code Format
             "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
             "Do not use python code block inside python code block !\n"
             "ONLY YOUR FIRST CODE BLOCK WILL BE EXECUTED !\n"
+# Base 2
             "PLEASE WAIT YOUR EXECUTION RESULT TO GO TO THE NEXT STEP !\n"
-
             "IF YOU ENDED RESOLVING USE THE FOLLOWING FUNCTION :\n"
             "final_answer(git_diff: str)\n"
+# Mix Base and Code Format exemples
             "Usage exemple:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff())\n```\n"
             "Here git_diff is the print given by the command git diff, use another tool to get it !"
 
@@ -110,6 +114,7 @@ class SWEBasePrompts:
             "```python\nset_new_current_objective(objective: str, previous_current_objective_status: str)\n```\n"
             "```python\nadd_main_objective_hint(msg: str)\n```\n"
             "```python\nadd_current_objective_hint(msg: str)\n```\n"
+# Base 3
             "Theses functions have automated xml management.\n"
             "THESES FUNCTIONS ASSURE PROMPT SAFETY AND DATA SAVING !\n"
             "Set only large or focused-important current objective\n"
@@ -142,17 +147,25 @@ class SWEAgent(Agent):
 
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
-#        status, value, output = self.sandbox.run(code + "\n")
-#        return (output, False)
-
         lines = code.split("\n")
         while lines and lines[-1].strip() == "":
             lines.pop()
+        lines += [""]
         result = ""
         final = ""
+        gen = read_entry_from_python()
+        next(gen)
         for line in lines:
-            status, value, output = self.sandbox.run(line)
-            result += f"{line}\n{output}\n"
+            try:
+                gen.send(line)
+                continue
+            except StopIteration as e:
+                gen = read_entry_from_python()
+                next(gen)
+                block = e.value
+            
+            status, value, output = self.sandbox.run(block)
+            result += f"{block}\n{output}\n"
             if status != "ok":
                 result += f"[{status}] {value}\n"
                 if status == "final_answer":
@@ -174,7 +187,7 @@ class SWEAgent(Agent):
         return (True, "no error")
 
 def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
-                      *, output: str = "swebench_solution.json",
+                      output: str = "swebench_solution.json",
                       providers_file: str = "config/swe_providers.json",
                       provider_url: str = "", model_name: str = ""
                       ) -> SWEAgent:
@@ -204,9 +217,24 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
     return agent
 
 
-def main(*args: Any, **kwargs: Any) -> None:
+def main(*,
+            task_file: str,
+            output: str = "swebench_solution.json",
+            providers_file: str = "config/swe_providers.json",
+            provider_url: str = "", model_name: str = ""
+            ) -> None:
 
-    with open(kwargs.pop("task_file"), "r") as file:
+    """ SWE Bench Agent.
+        Args:
+            task_file: mbpp task file
+            output: output file name
+            providers_file: json file of providers with llms and keys api names
+            provider_url: default provider to use (need model_name)
+            model_name: default model to use (need provider_url)
+
+    """
+
+    with open(task_file, "r") as file:
         mbpp_data = json.load(file)
     task = NewSWETaskInput(data=mbpp_data).data
 
@@ -216,7 +244,9 @@ def main(*args: Any, **kwargs: Any) -> None:
         testbed.setup(eval_script=task.eval_script)
         print(f"[container] {testbed.container.id[:12]} started")
         try:
-            agent = create_mbpp_agent(testbed.mcp_command(), task, **kwargs)
+            agent = create_mbpp_agent(
+                                testbed.mcp_command(), task, output,
+                                providers_file, provider_url, model_name)
             check = True
             while check:
                 check = agent.next_step()
