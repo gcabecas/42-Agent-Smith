@@ -83,7 +83,6 @@ class Agent(SolutionOutput):
 
     llmapi: LlmApi
     exec_result: str = ""
-    init: bool = False
     start: datetime = datetime.now()
     imports: str = ""
 
@@ -113,36 +112,20 @@ class Agent(SolutionOutput):
 
         self.iterations += 1
         start = datetime.now()
-        prompt = self.create_prompt()
-
         new = StepMetrics(step=len(self.steps) + 1)
         self.steps.append(new)
-        if self.init:
-            MemoryPrompt.add_message(prompt)
-        else:
-            self.init = True
 
-        DEBUG = True
+        DEBUG = False
+        #DEBUG = False
         global NDEBUG
         NDEBUG += 1
         if DEBUG:  # TODO debug if
             resp = {  # TODO
-                    "llm_input": prompt,
+                    "llm_input": "current",
                     "llm_output": """```python
-class Vector:
-    def __init__(self, x, y, z):
-        self.x = x
-        self.y = y
-        self.z = z
-
-    def __add__(self, other):
-        if isinstance(other, Vector):
-            return Vector(self.x + other.x, self.y + other.y, self.z + other.z)
-        else:
-            raise TypeError('Operands must be of type Vector')
-
-N = Vector(1, 0, 0)
-sum([N, Vector(0, 0, 0)])
+print("helo")
+set_new_current_objective("Investigate the error and find a solution to resolve the problem", "in progress")
+print("bye")
 ```""",
                 "input_tokens": 0,
                 "output_tokens": 0,
@@ -154,7 +137,7 @@ sum([N, Vector(0, 0, 0)])
             resp = self.llmapi.response(MemoryPrompt.messages)
 
         MemoryPrompt.add_message(resp["llm_output"], "assistant")
-        codes = MemoryPrompt.get_message_codes(self.llmapi.get_current())
+        codes = MemoryPrompt.get_message_codes()
 
         self.exec_result = ""
         if  len(codes) >= 1:
@@ -173,11 +156,14 @@ sum([N, Vector(0, 0, 0)])
             self.exec_result = read
             if len(codes) > 1:
                 self.exec_result += (
-                        "\nWarning, additionals code blocks gived was ignored;"
-                        " Only the first code block was executed"
+                        "\n<WARNING> Additionals code blocks gived was ignored;"
+                        " Only the first code block was executed </WARNING>"
                 )
 
         self.set_step_data(new, resp, start)
+        prompt = self.create_prompt()
+        MemoryPrompt.apply_buffer()
+        MemoryPrompt.add_message(prompt)
 
         if DEBUG and NDEBUG == 4:  # TODO
             return False

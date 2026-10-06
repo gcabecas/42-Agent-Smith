@@ -164,6 +164,7 @@ class MemoryPromptSave(Exception):
 class MemoryPrompt:
 
     _new_data: dict[str, Any] = dict()
+    _msg_buffer: str = ""
 
     @classmethod
     def _get_new_prompt_data(cls) -> dict[str, Any]:
@@ -178,14 +179,15 @@ class MemoryPrompt:
     @classmethod
     def save_data(cls) -> None:
         data = {
-            "messages": cls.messages,
             "memory_mode": cls.memory_mode,
+            "messages": cls.messages,
             "max": cls.max,
             "true_max": cls.true_max,
             "save_len": cls.save_len,
             "current_objective": cls.current_objective,
             "main_hints": cls.main_hints,
-            "current_hints": cls.current_hints
+            "current_hints": cls.current_hints,
+            "_msg_buffer": cls._msg_buffer
         }
         cls._new_data = data
 
@@ -206,11 +208,16 @@ class MemoryPrompt:
             cls.main_hints: list[str] = []
             cls.current_hints: list[list[str]] = []
 
-            current_objective = f"<CURRENT_OBJECTIVE>\n{launch_objective}\n</CURRENT_OBJECTIVE>"
+            current_objective = f"<CURRENT_OBJECTIVE>\n{launch_objective}\n</CURRENT_OBJECTIVE>\n"
             cls.current_hints.append(
                 [current_objective]
             )
             cls.add_message(current_objective)
+
+    @classmethod
+    def apply_buffer(cls) -> None:
+        cls.add_message(cls._msg_buffer)
+        cls._msg_buffer = ""
 
     # Spceial Method usable by the llm
     @classmethod
@@ -218,9 +225,9 @@ class MemoryPrompt:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        msg = f"\n<MAIN_OBJECTIVE_HINT>\n{msg}\n</MAIN_OBJECTIVE_HINT>"
+        msg = f"<MAIN_OBJECTIVE_HINT>\n{msg}\n</MAIN_OBJECTIVE_HINT>\n"
         cls.main_hints.append(msg)
-        cls.add_message(msg)
+        cls._msg_buffer += msg
 
         print("main ojective hint saved")
         cls.save_data()
@@ -231,29 +238,29 @@ class MemoryPrompt:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        msg = f"\n<CURRENT_OBJECTIVE_HINT>\n{msg}\n</CURRENT_OBJECTIVE_HINT>"
+        msg = f"<CURRENT_OBJECTIVE_HINT>\n{msg}\n</CURRENT_OBJECTIVE_HINT>\n"
         cls.current_hints[-1].append(msg)
-        cls.add_message(msg)
+        cls._msg_buffer += msg
 
         print("current ojective hint saved")
         cls.save_data()
 
     # Spceial Method usable by the llm
     @classmethod
-    def set_new_current_objective(cls, objective: str, previous_current_objective_status: str) -> None:
+    def set_new_current_objective(cls, objective: str, previous_objective_status: str) -> None:
         if objective == cls.current_objective:
             return
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        c_obj = previous_current_objective_status 
+        c_obj = previous_objective_status 
         if cls.current_objective:
-            main_hint = f"OBJECTIVE:{cls.current_objective}. STATUS:{c_obj}"
+            main_hint = f"OBJECTIVE:{cls.current_objective}. STATUS:{c_obj}\n"
             cls.add_main_objective_hint(main_hint)
         cls.current_objective = objective
-        new_objective = f"<CURRENT_OBJECTIVE>\n{objective}\n</CURRENT_OBJECTIVE>"
+        new_objective = f"<CURRENT_OBJECTIVE>\n{objective}\n</CURRENT_OBJECTIVE>\n"
         cls.current_hints.append([new_objective])
-        cls.add_message(new_objective)
+        cls._msg_buffer += new_objective
         
         print("new current ojective saved")
         cls.save_data()
@@ -262,6 +269,10 @@ class MemoryPrompt:
     # if len(all_memory) > cls.true_max ...
     @classmethod
     def compress_memory(cls) -> None:
+        # TODO
+        pass
+
+    def hard_compress_memory(cls) -> None:
         # TODO
         pass
 
@@ -277,24 +288,13 @@ class MemoryPrompt:
             cls.messages[-1]["content"] += f"\n{msg}"
 
     @classmethod
-    def get_message_codes(cls, model: str) -> list[str]:
-        # TODO
+    def get_message_codes(cls) -> list[str]:
 
-        out = []
         message = cls.messages[-1]
         if message["role"] != "assistant":
             raise MemoryPromptError(
                 "last message not from assistant, can't extract code")
         data = message["content"]
-        match model:
-            case "test":
-                pass
-            case "test2":
-                pass
-            case _:
-                try:
-                    out = re.findall(r"```python\s*\n(.*?)```",
-                                     data, flags=re.DOTALL)
-                except Exception:
-                    pass
+        out = re.findall(r"```python\s*\n(.*?)```",
+                         data, flags=re.DOTALL)
         return out

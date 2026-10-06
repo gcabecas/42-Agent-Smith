@@ -59,8 +59,8 @@ class SWEBasePrompts:
         info = sandbox_output.strip()
         if info:
             out =(
-                f"[sandbox output]:(\n{info}\n"
-                ")\n\n"
+                f"<SANDBOX_OUTPUT>\n{info}\n"
+                "</SANDBOX_OUTPUT>\n\n"
                 "IF THE SANDBOX OUTPUT IS EMPTY OR ENCOUNTER AN ERROR TRY SOMETHING DIFFERENT ! "
                 "If you found a very important information save it with the apropriate tool. "
                 "Otherwise continue investigate with tools or end the process with final_answer"
@@ -142,39 +142,28 @@ class NewSWETaskInput(BaseModel):
 
 class SWEAgent(Agent):
 
-    sandbox: Sandbox
+    sandbox_config: SandboxConfig
     mcp_tools: dict[str, Any]
 
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
-        lines = code.split("\n")
-        while lines and lines[-1].strip() == "":
-            lines.pop()
-        lines += [""]
-        result = ""
-        final = ""
-        gen = read_entry_from_python()
-        next(gen)
-        for line in lines:
-            try:
-                gen.send(line)
-                continue
-            except StopIteration as e:
-                gen = read_entry_from_python()
-                next(gen)
-                block = e.value
-            
-            status, value, output = self.sandbox.run(block)
-            result += f"{block}\n{output}\n"
-            if status != "ok":
-                result += f"[{status}] {value}\n"
-                if status == "final_answer":
-                    final = value
-                break
+        sandbox = Sandbox(self.sandbox_config, tools=self.mcp_tools)
+        try:
+            status, value, output = sandbox.run(code + "\n")
+            match status:
+                case "final_answer":
+                    if not isinstance(value, str) or not value:
+                        raise ValueError("final_answer value broken : {type(value)} | value")
+                    return (output, value)
+                case "ok":
+                    return (output, "")
+                case _:
+                    return (f"[STDOUT]: {output}\n[ERROR]: {value}", "")
+        except Exception:
+            raise
+        finally:
+            sandbox.stop()
 
-        self.sandbox.stop()
-        self.sandbox = Sandbox(SandboxConfig(), tools=self.mcp_tools)
-        return (result, final)
 
     def create_prompt(self) -> str:
         if self.exec_result:
@@ -206,13 +195,12 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
     MemoryPrompt.init(system_prompt, user_prompt, SWEBasePrompts.get_first_objective())
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
-    sandbox = Sandbox(SandboxConfig(), tools=client.tools)
     agent = SWEAgent(
         task_id=task.instance_id, benchmark="swebench",
         system_prompt=system_prompt, output_path=output,
         llmapi=llmapi,
         mcp_tools=client.tools,
-        sandbox=sandbox
+        sandbox_config=SandboxConfig()
     )
     return agent
 
@@ -243,19 +231,11 @@ def main(*,
             print("[image] pulling, this takes a few minutes...")
         testbed.setup(eval_script=task.eval_script)
         print(f"[container] {testbed.container.id[:12]} started")
-        try:
-            agent = create_mbpp_agent(
-                                testbed.mcp_command(), task, output,
-                                providers_file, provider_url, model_name)
-            check = True
-            while check:
-                check = agent.next_step()
-            agent.create_output()
-        except Exception:
-            raise
-        finally:
-            try:
-                agent.sandbox.stop()
-            except Exception:
-                pass
+        agent = create_mbpp_agent(
+                            testbed.mcp_command(), task, output,
+                            providers_file, provider_url, model_name)
+        check = True
+        while check:
+            check = agent.next_step()
+        agent.create_output()
     print("[container] removed")
