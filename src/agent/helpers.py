@@ -180,6 +180,7 @@ class MemoryPrompt:
     def save_data(cls) -> None:
         data = {
             "memory_mode": cls.memory_mode,
+            "base_user": cls.base_user,
             "messages": cls.messages,
             "max": cls.max,
             "true_max": cls.true_max,
@@ -200,7 +201,8 @@ class MemoryPrompt:
 
         if launch_objective:
             cls.memory_mode = True
-            cls.max = 0
+            cls.base_user = base_prompt_user
+            cls.max = 30
             cls.true_max = 0
             cls.save_len = 2
 
@@ -208,7 +210,7 @@ class MemoryPrompt:
             cls.main_hints: list[str] = []
             cls.current_hints: list[list[str]] = []
 
-            current_objective = f"<CURRENT_OBJECTIVE>\n{launch_objective}\n</CURRENT_OBJECTIVE>\n"
+            current_objective = f"<current_objective>\n{launch_objective}\n</current_objective>\n"
             cls.current_hints.append(
                 [current_objective]
             )
@@ -225,9 +227,9 @@ class MemoryPrompt:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        msg = f"<MAIN_OBJECTIVE_HINT>\n{msg}\n</MAIN_OBJECTIVE_HINT>\n"
+        hint = f"<main_objective_hint>\n{msg}\n</main_objective_hint>\n"
         cls.main_hints.append(msg)
-        cls._msg_buffer += msg
+        cls._msg_buffer += hint
 
         print("main ojective hint saved")
         cls.save_data()
@@ -238,39 +240,66 @@ class MemoryPrompt:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        msg = f"<CURRENT_OBJECTIVE_HINT>\n{msg}\n</CURRENT_OBJECTIVE_HINT>\n"
         cls.current_hints[-1].append(msg)
-        cls._msg_buffer += msg
+        hint = f"<current_objective_hint>\n{msg}\n</current_objective_hint>\n"
+        cls._msg_buffer += hint
 
         print("current ojective hint saved")
         cls.save_data()
 
     # Spceial Method usable by the llm
     @classmethod
-    def set_new_current_objective(cls, objective: str, previous_objective_status: str) -> None:
+    def set_new_current_objective(cls, objective: str) -> None:
         if objective == cls.current_objective:
+            print("this objective it's already tracked")
             return
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        c_obj = previous_objective_status 
-        if cls.current_objective:
-            main_hint = f"OBJECTIVE:{cls.current_objective}. STATUS:{c_obj}\n"
-            cls.add_main_objective_hint(main_hint)
         cls.current_objective = objective
-        new_objective = f"<CURRENT_OBJECTIVE>\n{objective}\n</CURRENT_OBJECTIVE>\n"
-        cls.current_hints.append([new_objective])
+        new_objective = f"<current_objective>\n{objective}\n</current_objective>\n"
+        cls.current_hints.append([objective])
         cls._msg_buffer += new_objective
         
         print("new current ojective saved")
         cls.save_data()
 
-    # if len(all_memory) > cls.max + len(important_memory) ...
-    # if len(all_memory) > cls.true_max ...
     @classmethod
     def compress_memory(cls) -> None:
-        # TODO
-        pass
+
+        if len(cls.messages) - 2 >= cls.max:
+
+            msg = cls.base_user
+            if cls.main_hints:
+                msg += (
+                        "<main_objective_hints>\n" +
+                        "\n".join(cls.main_hints) +
+                        "\n</main_objective_hints>\n"
+                )
+            if len(cls.current_hints) > 1:
+                msg += "<objectives_done>\n"
+                for elem in cls.current_hints[:-1]:
+                    if len(elem) > 1:
+                        hints = "; ".join(elem[1:])
+                        msg += f"{elem[0]} : <hints> {hints} </hints>\n"
+                    else:
+                        msg += f"{elem[0]}\n"
+
+                msg += "</objectives_done>\n"
+
+            if cls.messages[-1]["role"] == "user":
+                save = 6
+            else:
+                save = 5
+
+            if len(cls.messages) <= 2 + save:
+                raise ValueError("impossible save data")
+        
+            cutted = cls.messages[-save:]
+            cls.messages = cls.messages[:2]
+            cls.messages[1]["content"] = msg
+            cls.messages += cutted
+        
 
     def hard_compress_memory(cls) -> None:
         # TODO

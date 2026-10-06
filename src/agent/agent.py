@@ -85,6 +85,7 @@ class Agent(SolutionOutput):
     exec_result: str = ""
     start: datetime = datetime.now()
     imports: str = ""
+    executed: bool = False
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -111,6 +112,7 @@ class Agent(SolutionOutput):
     def next_step(self) -> bool:
 
         self.iterations += 1
+        self.executed = False
         start = datetime.now()
         new = StepMetrics(step=len(self.steps) + 1)
         self.steps.append(new)
@@ -145,6 +147,7 @@ print("bye")
             if self.imports:
                 code = f"{self.imports}\n{code}"
             read, final = self.sandbox_term(code)
+            self.executed = True
             new.sandbox_input = code
             new.sandbox_output = read
 
@@ -156,15 +159,17 @@ print("bye")
             self.exec_result = read
             if len(codes) > 1:
                 self.exec_result += (
-                        "\n<WARNING> Additionals code blocks gived was ignored;"
-                        " Only the first code block was executed </WARNING>"
+                        "\n<warning> Additionals code blocks gived was ignored;"
+                        " Only the first code block was executed </warning>"
                 )
 
-        self.set_step_data(new, resp, start)
         prompt = self.create_prompt()
-        MemoryPrompt.apply_buffer()
+        self.set_step_data(new, resp, start)
+        if MemoryPrompt.memory_mode:
+            MemoryPrompt.compress_memory()
+            MemoryPrompt.apply_buffer()
         MemoryPrompt.add_message(prompt)
-
+        
         if DEBUG and NDEBUG == 4:  # TODO
             return False
         else:

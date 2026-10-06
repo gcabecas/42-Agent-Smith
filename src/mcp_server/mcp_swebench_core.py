@@ -414,7 +414,7 @@ class SWETools(McpToolsCore):
                 stderr=subprocess.STDOUT,
                 text=True,
             )
-            read = result.stdout + result.stderr
+            read = result.stdout
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True)
             return
