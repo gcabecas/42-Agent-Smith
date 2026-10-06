@@ -1,14 +1,7 @@
 import argparse
-import json
-from pathlib import Path
 
-from src.common.models import SandboxConfig, SWEBenchTaskInput
 from src.sandbox.cli import repl
-from src.sandbox.manual import build_manual
-from src.sandbox.mcp_client import McpClient
-from src.swebench.testbed import DockerTestbed
-
-from src.sandbox.execute import Sandbox
+from src.swebench.session import SweBenchSession, load_task
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,31 +12,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-class server_docker():
-    def __init__(self, task: str, python: str = "python") -> None:
-        self.tasks = SWEBenchTaskInput(**json.loads(Path(task).read_text()))
-        self.python = python
-        self.testbed = DockerTestbed(self.tasks.docker_image, python=self.python)
-
-    def start(self) -> None:
-        if not self.testbed.has_image():
-            print("[image] pulling, this takes a few minutes...")
-        self.testbed.setup(eval_script=self.tasks.eval_script)
-        print(f"[container] {self.testbed.container.id[:12]} started")
-        print(f"[python] {self.python}")
-
-
 def main() -> None:
+    args = parse_args()
+    task = load_task(args.task_file)
+    with SweBenchSession(task, args.python) as session:
+        print(f"[task] {session.task.instance_id} ({session.task.repo})")
+        print(f"[image] {session.task.docker_image}")
+        sandbox = session.start()
 
-    server = server_docker("swe_task.json", python="python3.10")
-    server.start()
-    sandbox = Sandbox(SandboxConfig(), tools={})
+        if args.manual:
+            print(session.manual)
+        else:
+            repl(sandbox)
 
-    # status, value, output = sandbox.run("print('Hello, World!')") # code llm a la place du hello world
-    # if output:
-    #     print(output, end="")
-    # if status != "ok":
-    #     print(f"[{status}] {value}")
+    print("[container] removed")
+
 
 if __name__ == "__main__":
     main()
