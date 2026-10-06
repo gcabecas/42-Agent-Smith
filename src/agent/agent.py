@@ -86,6 +86,7 @@ class Agent(SolutionOutput):
     start: datetime = datetime.now()
     imports: str = ""
     executed: bool = False
+    demand: str = "test"
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -166,10 +167,12 @@ print("bye")
         prompt = self.create_prompt()
         self.set_step_data(new, resp, start)
         if MemoryPrompt.memory_mode:
-            MemoryPrompt.compress_memory()
             MemoryPrompt.apply_buffer()
-        MemoryPrompt.add_message(prompt)
-        
+            MemoryPrompt.add_message(prompt)
+            MemoryPrompt.compress_memory()
+        else:
+            MemoryPrompt.add_message(prompt)
+
         if DEBUG and NDEBUG == 4:  # TODO
             return False
         else:

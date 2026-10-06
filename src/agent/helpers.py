@@ -202,7 +202,7 @@ class MemoryPrompt:
         if launch_objective:
             cls.memory_mode = True
             cls.base_user = base_prompt_user
-            cls.max = 30
+            cls.max = 12
             cls.true_max = 0
             cls.save_len = 2
 
@@ -276,9 +276,9 @@ class MemoryPrompt:
                         "\n".join(cls.main_hints) +
                         "\n</main_objective_hints>\n"
                 )
-            if len(cls.current_hints) > 1:
+            if len(cls.current_hints) > 2:
                 msg += "<objectives_done>\n"
-                for elem in cls.current_hints[:-1]:
+                for elem in cls.current_hints[1:-1]:
                     if len(elem) > 1:
                         hints = "; ".join(elem[1:])
                         msg += f"{elem[0]} : <hints> {hints} </hints>\n"
@@ -286,13 +286,21 @@ class MemoryPrompt:
                         msg += f"{elem[0]}\n"
 
                 msg += "</objectives_done>\n"
+            msg += (
+                    f"<current_objective>\n{cls.current_hints[-1][0]}\n</current_objective>\n"
+            )
+            if len(cls.current_hints[-1]) > 1:
+                msg += f"<current_objective_hints>\n"
+                for i, elem in enumerate(cls.current_hints[-1][1:]):
+                    msg += f"[{i}]: {elem}\n"
+                msg += f"</current_objective_hints>\n"
 
             if cls.messages[-1]["role"] == "user":
                 save = 6
             else:
-                save = 5
+                save = 7
 
-            if len(cls.messages) <= 2 + save:
+            if len(cls.messages) < 2 + save:
                 raise ValueError("impossible save data")
         
             cutted = cls.messages[-save:]

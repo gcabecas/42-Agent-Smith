@@ -55,27 +55,6 @@ uv run moulinette_eval validate swebench ../cache/swebench_task.json \
 class SWEBasePrompts:
 
     @classmethod
-    def get_aftercode_prompt(cls, sandbox_output: str) -> str:
-        info = sandbox_output.strip()
-        if info:
-            out =(
-                f"<sandbox_output>\n{info}\n"
-                "</sandbox_output>\n\n"
-                "<instruction>\n<important!> If the sandbox output is empty or encounter an error you need to process something new"
-                ", detourning or resolving the error ! If 'assistant' responses are repetitive be smart and stop do the same things ! </important!>\n"
-                "If you found an important information save it imediately with a memory_tool before the memory be erased ! "
-                "Otherwise continue investigate with sandbox_tools, or find a new objective, or only if you resolved the problem end the process with final_answer\n</instruction>"
-            )
-        else:
-            out = "Your code was executed, but no print occured"
-        return out
-
-    @classmethod
-    def get_nocode_prompt(cls) -> str:
-        out = "Now you thought about the problem, use tools and eventually code to continue the searchs\n"
-        return out
-
-    @classmethod
     def get_first_objective(cls) -> str:
         out = "Find a new current objective to resolve the main one"
         return out
@@ -157,7 +136,7 @@ class SWEAgent(Agent):
             match status:
                 case "final_answer":
                     if not isinstance(value, str) or not value:
-                        raise ValueError(f"final_answer value broken : {type(value)} | value")
+                        raise ValueError(f"final_answer value broken : {type(value)} | {value}")
                     return (output, value)
                 case "ok":
                     return (output, "")
@@ -170,11 +149,45 @@ class SWEAgent(Agent):
 
 
     def create_prompt(self) -> str:
+
+        out = ""
         if self.executed:
-            out = SWEBasePrompts.get_aftercode_prompt(self.exec_result)
+            info = self.exec_result.strip()
+            if not info:
+                info = "[Your code was executed, but no print occured]"
+            out += (
+                f"<sandbox_output>\n{info}\n"
+                "</sandbox_output>\n\n"
+            )
+
+        if self.demand == "test":
+            out += ( 
+                "<instruction>\n"
+                "You have to execute a sandbox_tool ! or eventualy execute a small python code\n"
+                "</instruction>\n"
+            )
+            self.demand = "memorise"
         else:
-            out = SWEBasePrompts.get_nocode_prompt()
+            out += ( 
+                "<instruction>\n"
+                "You have to execute a memory_tool ! What information we get about this last test ? Do we have a new objective or the current is more important ?\n"
+                "</instruction>\n"
+            )
+            self.demand = "test"
+
+        out += "Or if you resolved the problem only, end the process with final_answer"
         return out
+
+        temp = (
+            f"<sandbox_output>\n{info}\n"
+            "</sandbox_output>\n\n"
+
+            "<instruction>\n<important!> If the sandbox output is empty or encounter an error you need to process something new"
+            ", detourning or resolving the error ! If 'assistant' responses are repetitive be smart and stop do the same things ! </important!>\n"
+            "If you found relevant information or a lead about the problem save it imediately with a memory_tool, data not saved is instantly erased ! "
+            "Otherwise continue investigate with sandbox_tools, or find a new objective, \n</instruction>"
+        )
+
 
     def check_solution(self) -> tuple[bool, str]:
         return (True, "no error")
