@@ -1,7 +1,6 @@
 import argparse
 import codeop
 import sys
-from typing import Any, Callable
 
 from src.common.models import SandboxConfig
 from src.sandbox.config import load_config
@@ -42,26 +41,25 @@ def read_entry() -> str | None:
             return source
 
 
-def repl(config: SandboxConfig,
-         tools: dict[str, Callable[..., Any]]) -> None:
-    with Sandbox(config, tools) as sandbox:
-        while True:
-            code = read_entry()
+def repl(sandbox: Sandbox) -> None:
+    while True:
+        code = read_entry()
 
-            if code is None or code.strip() in ("exit", "exit()"):
-                break
+        if code is None or code.strip() in ("exit", "exit()"):
+            break
 
-            status, value, output = sandbox.run(code)
-            if output:
-                print(output, end="")
-            if status != "ok":
-                print(f"[{status}] {value}")
+        status, value, output = sandbox.run(code)
+        if output:
+            print(output, end="")
+        if status != "ok":
+            print(f"[{status}] {value}")
 
 
 def main() -> None:
     args = parse_args()
     if not (args.mcp_stdio or args.mcp_server):
-        return repl(args.config, {})
+        with Sandbox(args.config) as sandbox:
+            return repl(sandbox)
     try:
         client = McpClient(args.mcp_stdio, args.mcp_server)
     except Exception as e:
@@ -70,7 +68,8 @@ def main() -> None:
         print(build_manual(args.config, client.specs,
                            client.resources, client.prompts))
     else:
-        repl(args.config, client.tools)
+        with Sandbox(args.config, client.tools) as sandbox:
+            repl(sandbox)
 
 
 if __name__ == "__main__":
