@@ -170,7 +170,7 @@ print("bye")
             prompt = self.create_prompt()
             MemoryPrompt.apply_buffer()
             MemoryPrompt.add_message(prompt)
-            #MemoryPrompt.compress_memory()
+            MemoryPrompt.compress_memory()
         else:
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
