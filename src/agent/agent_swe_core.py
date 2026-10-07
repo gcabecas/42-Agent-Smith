@@ -72,10 +72,10 @@ class SWEBasePrompts:
             "Sandbox tools usage is very important, they give you access to the environemnent you have to debug. "
             "You have to modifie directly files. It is entirely up to you to resolve the problem !\n"
             "You are in a fully automated pipeline, all the pyhton code you give is used in a sandbox and the output is returned by the user. "
-            "Comments are useless, the user will not read them.\n"
+            "The user will not read comments.\n"
             "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
-            "<important> The sandbox is just a small lab not a part of the bugged environement and not a part of problem to resolve."
-            " Use mainly tools provided by the sandbox !</important>\n"
+            "The sandbox is just a small lab not a part of the bugged environement and not a part of problem to resolve."
+            " Use mainly tools provided by the sandbox !\n"
             "Code executed in the sandbox have direct access to MCP-Tools functions, theses functions can interact with the git environemnt.\n"
             "Be smart and wait the result of your message to advise what to do next.\n"
 # Code Format
@@ -97,9 +97,9 @@ class SWEBasePrompts:
             "```python\nadd_current_objective_hint(msg: str)\n```\n"
             "</memory_tools>\n"
 # Base 3
-            "Theses functions have automated xml management.\n"
             "THESES FUNCTIONS ASSURE PROMPT SAFETY AND DATA SAVING !\n"
-            "Set only large or focused-important current objective\n"
+            "<suggestions>\n Set large or focused-important current objective.\n"
+            "Dont hesitate to put detailled informations with longs strings when needed using memory tools !\n<suggestions>\n"
         )
         system_prompt += (
                     f"<sandbox_rules>\n{manual}\n"
@@ -163,19 +163,23 @@ class SWEAgent(Agent):
         if self.demand == "test":
             out += ( 
                 "<instruction>\n"
-                "You have to execute a sandbox_tool ! or eventualy execute a small python code\n"
+                "You have to execute a sandbox_tool !\n"
+                "In your current objective with knowed hints."
+                "What test can give you an interesting new hint ? or what we need change ?\n"
                 "</instruction>\n"
             )
             self.demand = "memorise"
         else:
             out += ( 
                 "<instruction>\n"
-                "You have to execute a memory_tool ! What information we get about this last test ? Do we have a new objective or the current is more important ?\n"
+                "You have to execute a memory_tool !\n"
+                "What new information we get about this last test ? Do we have a new objective or the current is more important ?\n"
                 "</instruction>\n"
             )
             self.demand = "test"
 
-        out += "Or if you resolved the problem only, end the process with final_answer"
+        out += "Or if you resolved the problem only, end the process with final_answer\n"
+        out += "be smart, be inventive"
         return out
 
         temp = (

@@ -182,10 +182,6 @@ class MemoryPrompt:
             "memory_mode": cls.memory_mode,
             "base_user": cls.base_user,
             "messages": cls.messages,
-            "max": cls.max,
-            "true_max": cls.true_max,
-            "save_len": cls.save_len,
-            "current_objective": cls.current_objective,
             "main_hints": cls.main_hints,
             "current_hints": cls.current_hints,
             "_msg_buffer": cls._msg_buffer
@@ -202,11 +198,7 @@ class MemoryPrompt:
         if launch_objective:
             cls.memory_mode = True
             cls.base_user = base_prompt_user
-            cls.max = 12
-            cls.true_max = 0
-            cls.save_len = 2
 
-            cls.current_objective = ""
             cls.main_hints: list[str] = []
             cls.current_hints: list[list[str]] = []
 
@@ -227,6 +219,10 @@ class MemoryPrompt:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
+        if msg in cls.main_hints[1:]:
+            print("already knowed main ojective hint !")
+            return
+
         hint = f"<main_objective_hint>\n{msg}\n</main_objective_hint>\n"
         cls.main_hints.append(msg)
         cls._msg_buffer += hint
@@ -240,6 +236,10 @@ class MemoryPrompt:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
+        if msg in cls.current_hints[-1][1:]:
+            print("already knowed current ojective hint !")
+            return
+
         cls.current_hints[-1].append(msg)
         hint = f"<current_objective_hint>\n{msg}\n</current_objective_hint>\n"
         cls._msg_buffer += hint
@@ -250,13 +250,12 @@ class MemoryPrompt:
     # Spceial Method usable by the llm
     @classmethod
     def set_new_current_objective(cls, objective: str) -> None:
-        if objective == cls.current_objective:
+        if objective == cls.current_hints[-1][0]:
             print("this objective it's already tracked")
             return
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        cls.current_objective = objective
         new_objective = f"<current_objective>\n{objective}\n</current_objective>\n"
         cls.current_hints.append([objective])
         cls._msg_buffer += new_objective
@@ -267,7 +266,11 @@ class MemoryPrompt:
     @classmethod
     def compress_memory(cls) -> None:
 
-        if len(cls.messages) - 2 >= cls.max:
+        firsts_saved = 2
+        threshold = 5
+        lasts_saved = 4
+
+        if len(cls.messages) - firsts_saved >= threshold:
 
             msg = cls.base_user
             if cls.main_hints:
@@ -295,16 +298,13 @@ class MemoryPrompt:
                     msg += f"[{i}]: {elem}\n"
                 msg += f"</current_objective_hints>\n"
 
-            if cls.messages[-1]["role"] == "user":
-                save = 6
-            else:
-                save = 7
-
-            if len(cls.messages) < 2 + save:
+            if cls.messages[-1]["role"] != "user":
+                raise ValueError("impossible last role, can´t compress memory")
+            if len(cls.messages) <= firsts_saved + lasts_saved:
                 raise ValueError("impossible save data")
         
-            cutted = cls.messages[-save:]
-            cls.messages = cls.messages[:2]
+            cutted = cls.messages[-lasts_saved:]
+            cls.messages = cls.messages[:firsts_saved]
             cls.messages[1]["content"] = msg
             cls.messages += cutted
         
