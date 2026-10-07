@@ -7,13 +7,14 @@ from pydantic import BaseModel, Field
 from src.common.models import SandboxConfig, SWEBenchTaskInput
 from src.sandbox.execute import Sandbox
 from src.agent.agent import Agent
-from src.agent.helpers import LlmApi, MemoryPrompt
+from src.agent.helpers import LlmApi, MemoryPrompt, Log
 from src.swebench.server_docker import server_docker
 from src.sandbox.mcp_client import McpClient
 from src.sandbox.manual import build_manual
 from src.sandbox.cli import read_entry_from_python
 from src.swebench.testbed import DockerTestbed
 
+import random
 
 
 #class SWEBenchTaskInput(BaseModel):
@@ -68,11 +69,11 @@ class SWEBasePrompts:
             "You are a Software Engineering coding agent"
             "specialised to resolve SWE bench problems. "
             "You need to resolve git repository problems. "
+            "The user will not read comments. But tools using strings need to be used properly\n"
             "You are in a isolated environment, you have only access to a python sandbox and tools usable inside it to acquire data. "
             "Sandbox tools usage is very important, they give you access to the environemnent you have to debug. "
             "You have to modifie directly files. It is entirely up to you to resolve the problem !\n"
             "You are in a fully automated pipeline, all the pyhton code you give is used in a sandbox and the output is returned by the user. "
-            "The user will not read comments.\n"
             "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
             "The sandbox is just a small lab not a part of the bugged environement and not a part of problem to resolve."
             " Use mainly tools provided by the sandbox !\n"
@@ -99,7 +100,15 @@ class SWEBasePrompts:
 # Base 3
             "THESES FUNCTIONS ASSURE PROMPT SAFETY AND DATA SAVING !\n"
             "<suggestions>\n Set large or focused-important current objective.\n"
-            "Dont hesitate to put detailled informations with longs strings when needed using memory tools !\n<suggestions>\n"
+            "Dont hesitate to put detailled informations with longs strings when needed using memory tools !\n"
+            "If you broke files think of restoring the git repository (git restore .) with available tools\n"
+            "<hint_format>\nin <provenance_format> <provenance> | info: <information>'\n"
+            "<hint_format>\n"
+            "<exemples>\nin file foos.py | info: this file directly concern the error ...\n"
+            "in file funcs.py | info: this file has nothing to do with the bug\n"
+            "in repository this repo | i don't find code about a specific problem\n"
+            "in _ general | i think the problem is formed because ... \n</exemples>\n"
+            "<suggestions>\n"
         )
         system_prompt += (
                     f"<sandbox_rules>\n{manual}\n"
@@ -135,8 +144,8 @@ class SWEAgent(Agent):
             status, value, output = sandbox.run(code + "\n")
             match status:
                 case "final_answer":
-                    if not isinstance(value, str) or not value:
-                        raise ValueError(f"final_answer value broken : {type(value)} | {value}")
+                    if not value:
+                        Log.print("[final_answer without value !!!]")
                     return (output, value)
                 case "ok":
                     return (output, "")
@@ -151,6 +160,41 @@ class SWEAgent(Agent):
     def create_prompt(self) -> str:
 
         out = ""
+        anti_repetition_words = [
+            # Nouveauté
+            "new", "novel", "fresh", "original", "innovative", "inventive",
+            "unprecedented", "unseen", "untried", "unexplored", "uncharted",
+            "first-of-its-kind", "groundbreaking", "pioneering", "cutting-edge",
+            "state-of-the-art",
+            # Différence / unicité
+            "different", "distinct", "distinctive", "unique", "singular",
+            "one-of-a-kind", "unlike", "alternative", "divergent", "unconventional",
+            "unorthodox", "atypical", "non-obvious", "unexpected", "surprising",
+            "unfamiliar",
+            # Variété
+            "varied", "diverse", "versatile", "multifaceted", "assorted", "mixed",
+            "eclectic", "wide-ranging", "many-sided", "alternating", "rotating",
+            # Changement / progression
+            "changing", "evolving", "shifting", "progressive", "incremental",
+            "adaptive", "dynamic", "transformative", "pivotal", "decisive",
+            "game-changing",
+            # Créativité
+            "creative", "imaginative", "resourceful", "ingenious", "clever", "smart",
+            "lateral", "out-of-the-box", "experimental", "exploratory",
+            # Information / valeur ajoutée
+            "informative", "insightful", "revealing", "enlightening", "illuminating",
+            "meaningful", "substantive", "additive", "productive", "fruitful", "useful",
+        ]
+        magic1 = random.choice(anti_repetition_words)
+        while 1:
+            magic2 = random.choice(anti_repetition_words) 
+            if magic1 != magic2:
+                break
+        out += (
+                "<PRIMAL_DIRECTIVE>\nVerify KNOWN_DATA data to respond something very NEW and PROGRESSING !\n"
+                f"Be {magic1} and {magic2} in your response !\n</PRIMAL_DIRECTIVE>\n"
+        )
+
         if self.executed:
             info = self.exec_result.strip()
             if not info:
@@ -160,26 +204,27 @@ class SWEAgent(Agent):
                 "</sandbox_output>\n\n"
             )
 
-        if self.demand == "test":
+        if self.demand == "code":
             out += ( 
                 "<instruction>\n"
                 "You have to execute a sandbox_tool !\n"
-                "In your current objective with knowed hints."
+                "To reach your current objective, with knowed hints."
                 "What test can give you an interesting new hint ? or what we need change ?\n"
+                "<priority>\nDO NOT TAKE AN ACTION THAT DOES NOT ADVANCE THE RESOLUTION. "
+                "DO SOMETHING THAT ADDS NEW INFORMATION OR CHANGES THE ENVIRONMENT.\n</priority>\n"
                 "</instruction>\n"
             )
-            self.demand = "memorise"
         else:
             out += ( 
                 "<instruction>\n"
                 "You have to execute a memory_tool !\n"
                 "What new information we get about this last test ? Do we have a new objective or the current is more important ?\n"
+                "<priority>\nDO NOT RECREATE A ALREADY KNOWED INFORMATION. "
+                "ADD NEW DETAILS OR PRECISE WHAT NEW THING YOU CAN DO !.\n</priority>\n"
                 "</instruction>\n"
             )
-            self.demand = "test"
 
         out += "Or if you resolved the problem only, end the process with final_answer\n"
-        out += "be smart, be inventive"
         return out
 
         temp = (
@@ -222,7 +267,8 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
         system_prompt=system_prompt, output_path=output,
         llmapi=llmapi,
         mcp_tools=client.tools,
-        sandbox_config=SandboxConfig()
+        sandbox_config=SandboxConfig(),
+        demand="memorise"
     )
     return agent
 
@@ -261,3 +307,4 @@ def main(*,
             check = agent.next_step()
         agent.create_output()
     print("[container] removed")
+

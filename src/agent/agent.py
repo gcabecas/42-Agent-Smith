@@ -86,7 +86,7 @@ class Agent(SolutionOutput):
     start: datetime = datetime.now()
     imports: str = ""
     executed: bool = False
-    demand: str = "test"
+    demand: str = "code"
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -137,7 +137,7 @@ print("bye")
                 "retries": 0
             }
         else:
-            resp = self.llmapi.response(MemoryPrompt.messages)
+            resp = self.llmapi.response(MemoryPrompt.messages, self.demand)
 
         MemoryPrompt.add_message(resp["llm_output"], "assistant")
         codes = MemoryPrompt.get_message_codes()
@@ -164,13 +164,15 @@ print("bye")
                         " Only the first code block was executed </warning>"
                 )
 
-        prompt = self.create_prompt()
         self.set_step_data(new, resp, start)
         if MemoryPrompt.memory_mode:
+            self.demand = "memorise" if self.demand == "code" else "code"
+            prompt = self.create_prompt()
             MemoryPrompt.apply_buffer()
             MemoryPrompt.add_message(prompt)
             MemoryPrompt.compress_memory()
         else:
+            prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
 
         if DEBUG and NDEBUG == 4:  # TODO

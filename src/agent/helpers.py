@@ -1,6 +1,6 @@
 
 from typing import Any
-from openai import OpenAI
+from openai import OpenAI, BadRequestError
 import os
 import sys
 import json
@@ -101,19 +101,35 @@ class LlmApi:
             self.iurl = len(self.urls) - 1
             self.imodel = len(self.urls[self.iurl]["models"]) - 1
 
-    def response(self, msg: list[dict[str, str | int]]) -> dict[str, str | int]:
+
+    def response(self, msg: list[dict[str, str | int]], mode: str) -> dict[str, str | int]:
 
         retries = 0
+        if mode == "code":
+            temperature = 0.3
+        else:
+            temperature = 0.7
+
+        Log.print("[sending llm demand ..]")
         while 1:
             try:
                 params = {
                     "model": self.urls[self.iurl]["models"][self.imodel],
-                    "messages": msg
+                    "messages": msg,
+                    "temperature": temperature
                 }
-
                 self.requests += 1
-                response = self.urls[self.iurl]["client"].chat.completions.create(
-                    **params)
+                try:
+                    response = self.urls[self.iurl]["client"].chat.completions.create(
+                        **params)
+                except BadRequestError:
+                    Log.print(f"'temperature' not handled by: {self.get_current()}")
+                    params.pop("temperature")
+                    response = self.urls[self.iurl]["client"].chat.completions.create(
+                        **params)
+                    self.requests += 1
+
+                Log.print("[llm response recieved.]")
                 return {
                     "llm_input": msg[-1]["content"],
                     "llm_output": response.choices[0].message.content,
@@ -131,7 +147,7 @@ class LlmApi:
                     f"|{usr['models'][self.imodel]}: {e}"
                 )
                 Log.add_logs(msg)
-                print("response error; ", msg, file=sys.stderr)
+                Log.print("response error; ", msg)
                 self.next()
                 # time.sleep(0.1)
         return dict()
@@ -189,6 +205,15 @@ class MemoryPrompt:
         cls._new_data = data
 
     @classmethod
+    def warn_message(cls, info: str) -> str:
+        out = (
+            f"<WARNING>\nThis '{info}' it's already knowed and/or tracked. You are certainly engaging an infinite llm loop.\n"
+            "Triple check KNOWN_DATA !\n"
+            "Please be attentive of the course of envents and the prompt to realy progress in the resolving !\n</WARNING>"
+        )
+        return out
+
+    @classmethod
     def init(cls, base_prompt_system: str, base_prompt_user: str, launch_objective: str = "") -> None:
         cls.memory_mode = False
 
@@ -220,7 +245,7 @@ class MemoryPrompt:
             raise MemoryPromptError("Memory mode not configured")
 
         if msg in cls.main_hints[1:]:
-            print("already knowed main ojective hint !")
+            print(cls.warn_message("main ojective hint"))
             return
 
         hint = f"<main_objective_hint>\n{msg}\n</main_objective_hint>\n"
@@ -237,7 +262,7 @@ class MemoryPrompt:
             raise MemoryPromptError("Memory mode not configured")
 
         if msg in cls.current_hints[-1][1:]:
-            print("already knowed current ojective hint !")
+            print(cls.warn_message("current ojective hint"))
             return
 
         cls.current_hints[-1].append(msg)
@@ -251,7 +276,7 @@ class MemoryPrompt:
     @classmethod
     def set_new_current_objective(cls, objective: str) -> None:
         if objective == cls.current_hints[-1][0]:
-            print("this objective it's already tracked")
+            print(cls.warn_message("objective"))
             return
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
@@ -273,30 +298,33 @@ class MemoryPrompt:
         if len(cls.messages) - firsts_saved >= threshold:
 
             msg = cls.base_user
-            if cls.main_hints:
-                msg += (
-                        "<main_objective_hints>\n" +
-                        "\n".join(cls.main_hints) +
-                        "\n</main_objective_hints>\n"
-                )
-            if len(cls.current_hints) > 2:
-                msg += "<objectives_done>\n"
-                for elem in cls.current_hints[1:-1]:
-                    if len(elem) > 1:
-                        hints = "; ".join(elem[1:])
-                        msg += f"{elem[0]} : <hints> {hints} </hints>\n"
-                    else:
-                        msg += f"{elem[0]}\n"
+            if len(cls.current_hints) >= 2 or cls.main_hints:
+                msg += "<KNOWN_DATA>\n"
+                if cls.main_hints:
+                    msg += (
+                            "<main_objective_hints>\n" +
+                            "\n".join(cls.main_hints) +
+                            "\n</main_objective_hints>\n"
+                    )
+                if len(cls.current_hints) > 2:
+                    msg += "<objectives_done>\n"
+                    for elem in cls.current_hints[1:-1]:
+                        if len(elem) > 1:
+                            hints = "; ".join(elem[1:])
+                            msg += f"{elem[0]} : <hints> {hints} </hints>\n"
+                        else:
+                            msg += f"{elem[0]}\n"
 
-                msg += "</objectives_done>\n"
-            msg += (
-                    f"<current_objective>\n{cls.current_hints[-1][0]}\n</current_objective>\n"
-            )
-            if len(cls.current_hints[-1]) > 1:
-                msg += f"<current_objective_hints>\n"
-                for i, elem in enumerate(cls.current_hints[-1][1:]):
-                    msg += f"[{i}]: {elem}\n"
-                msg += f"</current_objective_hints>\n"
+                    msg += "</objectives_done>\n"
+                msg += (
+                        f"<current_objective>\n{cls.current_hints[-1][0]}\n</current_objective>\n"
+                )
+                if len(cls.current_hints[-1]) > 1:
+                    msg += f"<current_objective_hints>\n"
+                    for i, elem in enumerate(cls.current_hints[-1][1:]):
+                        msg += f"[{i}]: {elem}\n"
+                    msg += f"</current_objective_hints>\n"
+                msg += "</KNOWN_DATA>\n"
 
             if cls.messages[-1]["role"] != "user":
                 raise ValueError("impossible last role, can´t compress memory")
