@@ -74,51 +74,54 @@ class SWEBasePrompts:
             "Sandbox tools usage is very important, they give you access to the environemnent you have to debug. "
             "You have to modifie directly files. It is entirely up to you to resolve the problem !\n"
             "You are in a fully automated pipeline, all the pyhton code you give is used in a sandbox and the output is returned by the user. "
-            "For security the sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
+            "The sandbox is a minimal python environnement, if the code not work, think of trying differents possibilities. "
             "The sandbox is just a small lab not a part of the bugged environement and not a part of problem to resolve."
             " Use mainly tools provided by the sandbox !\n"
             "Code executed in the sandbox have direct access to MCP-Tools functions, theses functions can interact with the git environemnt.\n"
-            "Be smart and wait the result of your message to advise what to do next.\n"
 # Code Format
             "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
             "Do not use python code block inside python code block !\n"
             "ONLY YOUR FIRST CODE BLOCK WILL BE EXECUTED !\n"
 # Base 2
-            "PLEASE WAIT YOUR EXECUTION RESULT TO GO TO THE NEXT STEP !\n"
             "IF YOU ENDED RESOLVING (tests passed) USE THE FOLLOWING FUNCTION :\n"
             "final_answer(git_diff: str)\n"
 # Mix Base and Code Format exemples
             "Usage exemple:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
-            "Here git_diff is the print given by the command git diff, use another tool to get it !"
+            "Here git_diff is the string or print given by the command git diff, use another tool to get it !"
 
             "For more you have very important specials functions to manage your memory, helping for investigating, problem researchs and flaw tracking:\n"
             "<memory_tools>\n"
             "```python\nset_new_current_objective(objective: str)\n```\n"
             "```python\nadd_main_objective_hint(msg: str)\n```\n"
             "```python\nadd_current_objective_hint(msg: str)\n```\n"
+            "```python\ndelete_hint(source_objective: str, hint_id: int)\n```\n"
             "</memory_tools>\n"
 # Base 3
             "THESES FUNCTIONS ASSURE PROMPT SAFETY AND DATA SAVING !\n"
             "<suggestions>\n Set large or focused-important current objective.\n"
             "Dont hesitate to put detailled informations with longs strings when needed using memory tools !\n"
-            "If you broke files think of restoring the git repository (git restore .) with available tools\n"
             "<hint_format>\nin <provenance_format> <provenance> | info: <information>'\n"
             "<hint_format>\n"
             "<exemples>\nin file foos.py | info: this file directly concern the error ...\n"
-            "in file funcs.py | info: this file has nothing to do with the bug\n"
+            "in file module.py | info: this file has nothing to do with the bug\n"
+            "in file funcs.py | info: i modified this file with ...\n"
             "in repository this repo | i don't find code about a specific problem\n"
             "in _ general | i think the problem is formed because ... \n</exemples>\n"
+            "If you broke files think of restoring the git repository (git restore .) with available tools\n"
             "<suggestions>\n"
         )
         system_prompt += (
                     f"<sandbox_rules>\n{manual}\n"
+                    "WARNING TOOLS CAN POSSIBILY MODIFIE FILES, ESPECIALY SCRIPTS !\n"
                     "USE THESES PROVIDED TOOLS TO INVESTIGATE !\n"
                     "\n</sandbox_rules>\n"
         )
         user_prompt = (
             "<main_objective>\n"
-            f"Use sandbox tools to access the bugged environement. Use tools to modifie directly files if needed. "
+            "Use sandbox tools to access the bugged environement. Use tools to modifie directly files if needed. "
+            "Try to use several tools at once to speed up the process.\n"
             "It is entirely up to you to resolve the problem !\n"
+            "Be attentive of fake pists and order of events (file modifications can cause indices to become obsolete)\n"
             "You need to resolve the following problem statement:\n"
             f"<problem>\n{problem_statement}</problem>\n"
             "</main_objective>\n"
@@ -185,15 +188,6 @@ class SWEAgent(Agent):
             "informative", "insightful", "revealing", "enlightening", "illuminating",
             "meaningful", "substantive", "additive", "productive", "fruitful", "useful",
         ]
-        magic1 = random.choice(anti_repetition_words)
-        while 1:
-            magic2 = random.choice(anti_repetition_words) 
-            if magic1 != magic2:
-                break
-        out += (
-                "<PRIMAL_DIRECTIVE>\nVerify KNOWN_DATA data to respond something very NEW and PROGRESSING !\n"
-                f"Be {magic1} and {magic2} in your response !\n</PRIMAL_DIRECTIVE>\n"
-        )
 
         if self.executed:
             info = self.exec_result.strip()
@@ -205,38 +199,58 @@ class SWEAgent(Agent):
             )
 
         if self.demand == "code":
+            out += (
+                    "<directive>\nVerify KNOWN_DATA data to respond something very NEW and PROGRESSING !\n"
+                    "<resolving_and_progression>\n"
+                    "You need to base you on KNOWN_DATA to find news informations never getted, or deduct what data is obselete or misleading.\n"
+                    "You can edit or add things in the environement to evolute it (this is what resolve the main problem or cause the obsolescence of certain hints).\n"
+                    "summary: get data -> think -> change data -> check -> think -> (invalidation : repeat the process) / (validation : end)\n"
+                    "WE ARE IN ACTION PHASE (get data/change data/check/invalidation/validation)"
+                    "\n</resolving_and_progression>\n</directive>\n"
+            )
             out += ( 
                 "<instruction>\n"
+                "RESPOND WITH ONE UNIQUE CODEBLOCK\n"
                 "You have to execute a sandbox_tool !\n"
-                "To reach your current objective, with knowed hints."
-                "What test can give you an interesting new hint ? or what we need change ?\n"
-                "<priority>\nDO NOT TAKE AN ACTION THAT DOES NOT ADVANCE THE RESOLUTION. "
-                "DO SOMETHING THAT ADDS NEW INFORMATION OR CHANGES THE ENVIRONMENT.\n</priority>\n"
+                "What to do to reach your current objective or the main objective, in following the directive.\n"
+                "What file(s) you can change or add to resolve the problem ? What test can give you interestings new hints ?\n"
+                "If you have enought informations/hints maybe modifie or add a file ?\n"
+                "<priority>\nDO NOT TAKE AN ACTION THAT DOES NOT PROGRESS THE RESOLUTION. "
+                "DO SOMETHING TO CHANGE SOMETHING IN THE ENVIRONMENT OR FIND NEW INFORMATIONS (not in KNOWN_DATA, unless the hint is obselete).\n</priority>\n"
+                "If you resolved the main problem only, you can end the process with final_answer\n"
                 "</instruction>\n"
             )
         else:
+            out += (
+                    "<directive>\nVerify KNOWN_DATA data to respond something very NEW and PROGRESSING !\n"
+                    "<resolving_and_progression>\n"
+                    "You need to base you on KNOWN_DATA to find news informations never getted, or deduct what data is obselete or misleading. "
+                    "Also you can make assumption and valid or invalide a previous assumption.\n"
+                    "summary: get data -> think -> change data -> check -> think -> (not ok : repeat the process) / (ok : end)\n"
+                    "WE ARE IN THINK PHASE !"
+                    "\n</resolving_and_progression>\n</directive>\n"
+            )
             out += ( 
                 "<instruction>\n"
+                "RESPOND WITH ONE UNIQUE CODEBLOCK\n"
                 "You have to execute a memory_tool !\n"
-                "What new information we get about this last test ? Do we have a new objective or the current is more important ?\n"
-                "<priority>\nDO NOT RECREATE A ALREADY KNOWED INFORMATION. "
-                "ADD NEW DETAILS OR PRECISE WHAT NEW THING YOU CAN DO !.\n</priority>\n"
+                "What new information we get about this last test ? Do we have a new objective or the current is more important ?"
+                " A previous hint(s) become obsolete and need to be delete ?\n"
+                "If you find no important information you can just log what you do, precise why it's was vain or utile \n"
+                "<priority>\nIF NOT NEW INFORMATION FOUND, "
+                "PRECISE WHAT NEW THING YOU CAN DO NEXT TO PROGRESS !.\n</priority>\n"
+                "If you resolved the main problem only, you can end the process with final_answer\n"
                 "</instruction>\n"
             )
 
-        out += "Or if you resolved the problem only, end the process with final_answer\n"
+        magic1 = random.choice(anti_repetition_words)
+        while 1:
+            magic2 = random.choice(anti_repetition_words) 
+            if magic1 != magic2:
+                break
+        out += f"Be {magic1} and {magic2} in your response !\n"
+
         return out
-
-        temp = (
-            f"<sandbox_output>\n{info}\n"
-            "</sandbox_output>\n\n"
-
-            "<instruction>\n<important!> If the sandbox output is empty or encounter an error you need to process something new"
-            ", detourning or resolving the error ! If 'assistant' responses are repetitive be smart and stop do the same things ! </important!>\n"
-            "If you found relevant information or a lead about the problem save it imediately with a memory_tool, data not saved is instantly erased ! "
-            "Otherwise continue investigate with sandbox_tools, or find a new objective, \n</instruction>"
-        )
-
 
     def check_solution(self) -> tuple[bool, str]:
         return (True, "no error")

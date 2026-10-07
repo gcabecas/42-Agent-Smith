@@ -83,6 +83,8 @@ def _loop(pipe: Connection, config: SandboxConfig,
     exec_builtins["set_new_current_objective"] = MemoryPrompt.set_new_current_objective
     exec_builtins["add_main_objective_hint"] = MemoryPrompt.add_main_objective_hint
     exec_builtins["add_current_objective_hint"] = MemoryPrompt.add_current_objective_hint
+    exec_builtins["delete_hint"] = MemoryPrompt.delete_hint
+
     exec_builtins["_get_new_prompt_data"] = MemoryPrompt._get_new_prompt_data
 
     for name in tool_names:

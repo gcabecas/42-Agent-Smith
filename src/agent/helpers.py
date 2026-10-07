@@ -207,9 +207,9 @@ class MemoryPrompt:
     @classmethod
     def warn_message(cls, info: str) -> str:
         out = (
-            f"<WARNING>\nThis '{info}' it's already knowed and/or tracked. You are certainly engaging an infinite llm loop.\n"
-            "Triple check KNOWN_DATA !\n"
-            "Please be attentive of the course of envents and the prompt to realy progress in the resolving !\n</WARNING>"
+            f"<DANGEROUS_ERROR>\nThis '{info}' it's already knowed and/or tracked. You are certainly engaging an infinite llm loop.\n"
+            "Check KNOWN_DATA ! and check directive !\n"
+            "DO SOMETHING PROGRESSING THE RESOLVING !\n</DANGEROUS_ERROR>"
         )
         return out
 
@@ -288,6 +288,28 @@ class MemoryPrompt:
         print("new current ojective saved")
         cls.save_data()
 
+    # Spceial Method usable by the llm
+    @classmethod
+    def delete_hint(cls, source_objective: str, hint_id: int) -> None:
+
+        for elem in cls.current_hints[1:]:
+            if source_objective == elem[0]:
+                if len(elem) > hint_id > 0:
+                    elem.pop(hint_id)
+                    print("hint deleted successfufly")
+                    cls.save_data()
+                    return
+                break
+        if "main" in source_objective:
+            hint_id -= 1
+            if len(cls.main_hints) > hint_id >= 0:
+                cls.main_hints.pop(hint_id)
+                print("hint deleted successfully")
+                cls.save_data()
+                return
+        print(f"[{hint_id}] not found in {source_objective}")
+        
+
     @classmethod
     def compress_memory(cls) -> None:
 
@@ -301,28 +323,31 @@ class MemoryPrompt:
             if len(cls.current_hints) >= 2 or cls.main_hints:
                 msg += "<KNOWN_DATA>\n"
                 if cls.main_hints:
+                    for j, elem in enumerate(cls.main_hints, 1):
+                        msg += f"<hint_id:{j}>{elem}<hint_id:{j}>\n"
+
                     msg += (
                             "<main_objective_hints>\n" +
                             "\n".join(cls.main_hints) +
                             "\n</main_objective_hints>\n"
                     )
                 if len(cls.current_hints) > 2:
-                    msg += "<objectives_done>\n"
+                    msg += "<previous_objectives>\n"
                     for elem in cls.current_hints[1:-1]:
-                        if len(elem) > 1:
-                            hints = "; ".join(elem[1:])
-                            msg += f"{elem[0]} : <hints> {hints} </hints>\n"
+                        if len(elem[1:]) > 1:
+                            for j, hint in enumerate(elem[1:], 1):
+                                msg += f"<{elem[0]}>: <hint_id:{j}>{hint}</hint_id:{j}>\n"
                         else:
-                            msg += f"{elem[0]}\n"
+                            msg += f"<{elem[0]}>\n"
 
-                    msg += "</objectives_done>\n"
+                    msg += "</previous_objectives>\n"
                 msg += (
                         f"<current_objective>\n{cls.current_hints[-1][0]}\n</current_objective>\n"
                 )
                 if len(cls.current_hints[-1]) > 1:
                     msg += f"<current_objective_hints>\n"
-                    for i, elem in enumerate(cls.current_hints[-1][1:]):
-                        msg += f"[{i}]: {elem}\n"
+                    for j, elem in enumerate(cls.current_hints[-1][1:], 1):
+                        msg += f"[{j}]: {elem}\n"
                     msg += f"</current_objective_hints>\n"
                 msg += "</KNOWN_DATA>\n"
 
