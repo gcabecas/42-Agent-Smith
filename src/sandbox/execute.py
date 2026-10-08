@@ -80,10 +80,8 @@ def _loop(pipe: Connection, config: SandboxConfig,
         restricted_open, config.allowed_directories)
     exec_builtins["final_answer"] = final_answer
 
-    exec_builtins["set_new_current_objective"] = MemoryPrompt.set_new_current_objective
-    exec_builtins["add_main_objective_hint"] = MemoryPrompt.add_main_objective_hint
-    exec_builtins["add_current_objective_hint"] = MemoryPrompt.add_current_objective_hint
-    exec_builtins["delete_hint"] = MemoryPrompt.delete_hint
+    exec_builtins["go_next_step"] = MemoryPrompt.go_next_step
+    exec_builtins["save_missing_info"] = MemoryPrompt.save_missing_info
 
     exec_builtins["_get_new_prompt_data"] = MemoryPrompt._get_new_prompt_data
 

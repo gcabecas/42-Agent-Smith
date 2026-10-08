@@ -1,5 +1,6 @@
 
 from typing import Any
+from pydantic import BaseModel, ConfigDict
 from openai import OpenAI, BadRequestError
 import os
 import sys
@@ -40,7 +41,20 @@ class Log:
                     f_open.write(str(elem) + "\n")
         except Exception as e:
             print(f"Logging Error ! : {e}", file=sys.stderr)
-            
+
+
+class Provider(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    models: list[str]
+    url: str
+    api_key: str
+
+
+class ProvidersList(BaseModel):
+    data: list[Provider]
+
 
 class LlmApiError(Exception):
     pass
@@ -60,6 +74,7 @@ class LlmApi:
         try:
             with open(providers_file, "r") as f_open:
                 self.urls = json.load(f_open)
+                ProvidersList(data=self.urls)
         except Exception as e:
             raise LlmApiError(
                 f"can't load providers in: {providers_file} error: {e}")
@@ -102,26 +117,24 @@ class LlmApi:
             self.imodel = len(self.urls[self.iurl]["models"]) - 1
 
 
-    def response(self, msg: list[dict[str, str | int]], mode: str) -> dict[str, str | int]:
+    def response(self, messages: list[dict[str, str | int]], temperature: int = 0.1) -> dict[str, str | int]:
 
         retries = 0
-        if mode == "code":
-            temperature = 0.3
-        else:
-            temperature = 0.7
 
         Log.print("[sending llm demand ..]")
         while 1:
             try:
                 params = {
                     "model": self.urls[self.iurl]["models"][self.imodel],
-                    "messages": msg,
+                    "messages": messages,
                     "temperature": temperature
                 }
                 self.requests += 1
                 try:
                     response = self.urls[self.iurl]["client"].chat.completions.create(
                         **params)
+                    output = response.choices[0].message.content
+                    Log.print(f"[llm response recieved.]\n{output}\n[/llm response recieved.]")
                 except BadRequestError:
                     Log.print(f"'temperature' not handled by: {self.get_current()}")
                     params.pop("temperature")
@@ -129,10 +142,11 @@ class LlmApi:
                         **params)
                     self.requests += 1
 
-                Log.print("[llm response recieved.]")
+                if not isinstance(output, str) or output == "":
+                    raise LlmApiError("llm output is empty")
                 return {
-                    "llm_input": msg[-1]["content"],
-                    "llm_output": response.choices[0].message.content,
+                    "llm_input": messages[-1]["content"],
+                    "llm_output": output,
                     "input_tokens": response.usage.prompt_tokens,
                     "output_tokens": response.usage.completion_tokens,
                     "api_url": self.urls[self.iurl]["url"],
@@ -146,7 +160,6 @@ class LlmApi:
                     f"{usr['name']}"
                     f"|{usr['models'][self.imodel]}: {e}"
                 )
-                Log.add_logs(msg)
                 Log.print("response error; ", msg)
                 self.next()
                 # time.sleep(0.1)
@@ -169,6 +182,7 @@ class LlmApi:
 class MemoryPromptError(Exception):
     pass
 
+
 class MemoryPromptSave(Exception):
 
     def __str__(self):
@@ -176,6 +190,7 @@ class MemoryPromptSave(Exception):
     
     def __init__(self, data):
         self.data = data
+
 
 class MemoryPrompt:
 
@@ -196,10 +211,12 @@ class MemoryPrompt:
     def save_data(cls) -> None:
         data = {
             "memory_mode": cls.memory_mode,
+            "go_next": cls.go_next,
             "base_user": cls.base_user,
             "messages": cls.messages,
-            "main_hints": cls.main_hints,
-            "current_hints": cls.current_hints,
+            "hints": cls.hints,
+            "next_step": cls.next_step,
+            "current_step": cls.current_step,
             "_msg_buffer": cls._msg_buffer
         }
         cls._new_data = data
@@ -207,31 +224,32 @@ class MemoryPrompt:
     @classmethod
     def warn_message(cls, info: str) -> str:
         out = (
-            f"<DANGEROUS_ERROR>\nThis '{info}' it's already knowed and/or tracked. You are certainly engaging an infinite llm loop.\n"
-            "Check KNOWN_DATA ! and check directive !\n"
-            "DO SOMETHING PROGRESSING THE RESOLVING !\n</DANGEROUS_ERROR>"
+            f"<DIRECTIVE>\n'{info}' has already been executed. You are certainly engaging an infinite llm loop.\n"
+            "Be attentive of KNOWN_INFO, and make a new assumtion to verify at next execution\n"
+            "exemple 1: ```pyhton\nadd_current_objective_hint('we have now enough informations and need to resolve the problem')\n```\n"
+            "exemple 2: ```pyhton\nadd_current_objective_hint('i think the file x have already been modified,"
+            " we need to git restore and edit it with a proper complete python code block')\n```\n"
+            "\n</DIRECTIVE>"
         )
         return out
 
     @classmethod
     def init(cls, base_prompt_system: str, base_prompt_user: str, launch_objective: str = "") -> None:
         cls.memory_mode = False
+        cls.go_next = False
 
         cls.messages = [{"role": "system", "content": base_prompt_system}]
-        cls.messages.append({"role": "user", "content": base_prompt_user})
+        prompt_user = base_prompt_user + "\n<KNOWN_INFO> no saved data </KNOWN_INFO>"
+        cls.messages.append({"role": "user", "content": prompt_user})
 
         if launch_objective:
             cls.memory_mode = True
             cls.base_user = base_prompt_user
-
-            cls.main_hints: list[str] = []
-            cls.current_hints: list[list[str]] = []
-
-            current_objective = f"<current_objective>\n{launch_objective}\n</current_objective>\n"
-            cls.current_hints.append(
-                [current_objective]
-            )
-            cls.add_message(current_objective)
+            cls.next_step = {
+                            "get data": "modifie", "modifie": "test",
+                            "test": "clean memory", "clean memory": "reset"}
+            cls.current_step = "get data"
+            cls.hints: list[str] = []
 
     @classmethod
     def apply_buffer(cls) -> None:
@@ -240,126 +258,95 @@ class MemoryPrompt:
 
     # Spceial Method usable by the llm
     @classmethod
-    def add_main_objective_hint(cls, msg: str) -> None:
+    def save_missing_info(cls, msg: str) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        if msg in cls.main_hints[1:]:
-            print(cls.warn_message("main ojective hint"))
-            return
+        if hint in cls.hints:
+            print("hint already knowed")
+            # TODO IMPLEMENT ERROR CHECKING
 
-        hint = f"<main_objective_hint>\n{msg}\n</main_objective_hint>\n"
-        cls.main_hints.append(msg)
-        cls._msg_buffer += hint
-
-        print("main ojective hint saved")
+        cls.hints.append(hint)
+        print("hint saved")
         cls.save_data()
 
     # Spceial Method usable by the llm
     @classmethod
-    def add_current_objective_hint(cls, msg: str) -> None:
+    def go_next_step(cls) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
+        cls.go_next = True
 
-        if msg in cls.current_hints[-1][1:]:
-            print(cls.warn_message("current ojective hint"))
+    @classmethod
+    def apply_go_next_step(cls) -> None:
+        if not cls.go_next:
             return
+        cls.go_next = False
 
-        cls.current_hints[-1].append(msg)
-        hint = f"<current_objective_hint>\n{msg}\n</current_objective_hint>\n"
-        cls._msg_buffer += hint
-
-        print("current ojective hint saved")
+        cls.current_step = cls.next_step[cls.current_step]
+        print(f"step is now: {cls.current_step}")
         cls.save_data()
 
-    # Spceial Method usable by the llm
-    @classmethod
-    def set_new_current_objective(cls, objective: str) -> None:
-        if objective == cls.current_hints[-1][0]:
-            print(cls.warn_message("objective"))
-            return
-        if not cls.memory_mode:
-            raise MemoryPromptError("Memory mode not configured")
+    
+    """ 
+    problematic:
+        1 create a efficient memory manager for prompting
+        2 how guide the llm to resolve the problem
 
-        new_objective = f"<current_objective>\n{objective}\n</current_objective>\n"
-        cls.current_hints.append([objective])
-        cls._msg_buffer += new_objective
-        
-        print("new current ojective saved")
-        cls.save_data()
+    NEW PIEPLINE : 
+    Idea 1:
+        prompt rolling: 3 phases (3 prompt possible)
+            1:
+                get data
+            2:
+                modifie something
+            3:
+                test
+            then:
+                RESET THE ENVIRONEMENT
+                CLEAN THE PROMPT
+                new hint created !
 
-    # Spceial Method usable by the llm
-    @classmethod
-    def delete_hint(cls, source_objective: str, hint_id: int) -> None:
+        how switch phase:
+            llm using tool next_phase()
+            error detected:
+                infinite repetition
+                too many tokens used
+                
+        possible problems:
+            large infinite loop using the rolling system
+            prompt too large
 
-        for elem in cls.current_hints[1:]:
-            if source_objective == elem[0]:
-                if len(elem) > hint_id > 0:
-                    elem.pop(hint_id)
-                    print("hint deleted successfufly")
-                    cls.save_data()
-                    return
-                break
-        if "main" in source_objective:
-            hint_id -= 1
-            if len(cls.main_hints) > hint_id >= 0:
-                cls.main_hints.pop(hint_id)
-                print("hint deleted successfully")
-                cls.save_data()
-                return
-        print(f"[{hint_id}] not found in {source_objective}")
-        
+    SPECIAL TOOLS:
+        go_next_phase() ???
+        save_hint(msg: str) ???
+
+    possible prompt structure:
+        1:
+            system : all basics
+            user:
+                phase prompt
+                MEMORY:
+                    <hint>
+                    <hint>
+                    <output1>
+                    <output2>
+                    ...
+    """ 
 
     @classmethod
     def compress_memory(cls) -> None:
-
-        firsts_saved = 2
-        threshold = 5
-        lasts_saved = 4
-
-        if len(cls.messages) - firsts_saved >= threshold:
-
-            msg = cls.base_user
-            if len(cls.current_hints) >= 2 or cls.main_hints:
-                msg += "<KNOWN_DATA>\n"
-                if cls.main_hints:
-                    for j, elem in enumerate(cls.main_hints, 1):
-                        msg += f"<hint_id:{j}>{elem}<hint_id:{j}>\n"
-
-                    msg += (
-                            "<main_objective_hints>\n" +
-                            "\n".join(cls.main_hints) +
-                            "\n</main_objective_hints>\n"
-                    )
-                if len(cls.current_hints) > 2:
-                    msg += "<previous_objectives>\n"
-                    for elem in cls.current_hints[1:-1]:
-                        if len(elem[1:]) > 1:
-                            for j, hint in enumerate(elem[1:], 1):
-                                msg += f"<{elem[0]}>: <hint_id:{j}>{hint}</hint_id:{j}>\n"
-                        else:
-                            msg += f"<{elem[0]}>\n"
-
-                    msg += "</previous_objectives>\n"
-                msg += (
-                        f"<current_objective>\n{cls.current_hints[-1][0]}\n</current_objective>\n"
-                )
-                if len(cls.current_hints[-1]) > 1:
-                    msg += f"<current_objective_hints>\n"
-                    for j, elem in enumerate(cls.current_hints[-1][1:], 1):
-                        msg += f"[{j}]: {elem}\n"
-                    msg += f"</current_objective_hints>\n"
-                msg += "</KNOWN_DATA>\n"
-
-            if cls.messages[-1]["role"] != "user":
-                raise ValueError("impossible last role, can´t compress memory")
-            if len(cls.messages) <= firsts_saved + lasts_saved:
-                raise ValueError("impossible save data")
         
-            cutted = cls.messages[-lasts_saved:]
-            cls.messages = cls.messages[:firsts_saved]
-            cls.messages[1]["content"] = msg
-            cls.messages += cutted
+        if cls.current_step != "clean memory":
+            return
+        cls.current_step = "get data"
+
+        cls.messages = cls.messages[:2]
+        cls.messages[1]["content"] = cls.base_user + "\n<KNOWN_INFO>\n"
+        for i, elem in enumerate(cls.hints, 1):
+            cls.messages[1]["content"] += f"[{i}] {elem}\n"
+        cls.messages[1]["content"] += "</KNOWN_INFO>"
+
         
 
     def hard_compress_memory(cls) -> None:

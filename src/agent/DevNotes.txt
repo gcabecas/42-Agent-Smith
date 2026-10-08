@@ -1,5 +1,7 @@
 uv run python agent_mbpp.py --task-file mbpp_test_task.json
 
+the llm crashed the program with non string final answer arg
+
 usage of exit in sandbox close it, can't create function or variable with this name (llm can !)
 
 verifie the tokens usage !

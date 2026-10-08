@@ -86,7 +86,6 @@ class Agent(SolutionOutput):
     start: datetime = datetime.now()
     imports: str = ""
     executed: bool = False
-    demand: str = "code"
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -137,40 +136,38 @@ print("bye")
                 "retries": 0
             }
         else:
-            resp = self.llmapi.response(MemoryPrompt.messages, self.demand)
+            resp = self.llmapi.response(MemoryPrompt.messages)
 
         MemoryPrompt.add_message(resp["llm_output"], "assistant")
         codes = MemoryPrompt.get_message_codes()
 
         self.exec_result = ""
         if  len(codes) >= 1:
-            code = codes[0]
-            if self.imports:
-                code = f"{self.imports}\n{code}"
-            read, final = self.sandbox_term(code)
-            self.executed = True
-            new.sandbox_input = code
-            new.sandbox_output = read
+            for i, code in enumerate(codes, 1):
+                if self.imports:
+                    code = f"{self.imports}\n{code}"
+                read, final = self.sandbox_term(code)
+                self.executed = True
+                new.sandbox_input += f"[codeblock: {i}]\n{code}\n"
+                if len(codes) > 1:
+                    new.sandbox_output += f"[codeblock: {i}]\n{read}\n"
+                else:
+                    new.sandbox_output = read
 
-            if final:
-                self.solution = final
-                self.set_step_data(new, resp, start)
-                return False
-
-            self.exec_result = read
-            if len(codes) > 1:
-                self.exec_result += (
-                        "\n<warning> Additionals code blocks gived was ignored;"
-                        " Only the first code block was executed </warning>"
-                )
+                if final:
+                    self.solution = final
+                    self.set_step_data(new, resp, start)
+                    return False
+            self.exec_result = new.sandbox_output
 
         self.set_step_data(new, resp, start)
         if MemoryPrompt.memory_mode:
-            self.demand = "memorise" if self.demand == "code" else "code"
+            if MemoryPrompt.current_step == "reset":
+                MemoryPrompt.compress_memory()
+            MemoryPrompt.apply_go_next_step()
             prompt = self.create_prompt()
             MemoryPrompt.apply_buffer()
             MemoryPrompt.add_message(prompt)
-            MemoryPrompt.compress_memory()
         else:
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)

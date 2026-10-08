@@ -1,17 +1,23 @@
 [
 	{
-		"name": "google", "models": ["gemini-3.8-flash"],
-		"url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-		"api_key": "GOOGLE_API_KEY"
-	},
-	{
 		"name": "openrouter", "models": ["thinkingmachines/inkling:free"],
 		"url": "https://openrouter.ai/api/v1",
 		"api_key": "OPENROUTER_API_KEY"
 	},
 	{
-		"name": "mistral", "models": ["zai-glm-5-3", "mistral-medium-3-5", "codestral-2508"],
+		"name": "mistral", "models": ["codestral-2508", "zai-glm-5-3", "mistral-medium-3-5"],
 		"url": "https://api.mistral.ai/v1",
 		"api_key": "MISTRAL_API_KEY"
+	},
+	{
+		"name": "google", "models": ["gemini-3.8-flash"],
+		"url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+		"api_key": "GOOGLE_API_KEY"
+	},
+	{
+		  "name": "groq",
+		  "url": "https://api.groq.com/openai/v1",
+		  "models": ["llama-3.3-70b-versatile", "openai/gpt-oss-20b", "openai/gpt-oss-120b"],
+		  "api_key": "GROQ_API_KEY"
 	}
 ]
