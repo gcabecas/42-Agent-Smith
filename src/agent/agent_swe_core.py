@@ -56,11 +56,6 @@ uv run moulinette_eval validate swebench ../cache/swebench_task.json \
 class SWEBasePrompts:
 
     @classmethod
-    def get_first_objective(cls) -> str:
-        out = "Find a new current objective to resolve the main one"
-        return out
-
-    @classmethod
     def get_first_prompts(cls, repo: str, problem_statement: str,
                                 hints_text: list[str], manual: str) -> tuple[str, str]:
 
@@ -71,25 +66,27 @@ class SWEBasePrompts:
 
             "You are in a isolated git repository environment, you have only access to a python sandbox and tools usable inside it to acquire data and take action.\n"
             "Sandbox tools usage is very important, they are python functions usable inside the sandbox, they give you access to the environment you have to debug.\n"
-            "The user will not read comments, use mainly python code with tools provided !\n"
-            "It is entirely up to you to resolve the problem ! You have to modifie directly files.\n"
-            "You are in a fully automated pipeline, all the pyhton code you give is used in the sandbox and the output is returned by the user,"
+            "Do not write comments or explanations, only code blocks.\n"
+            "It is entirely up to you to resolve the problem. You have to modifie directly files.\n"
+            "You are in a fully automated pipeline, all the pyhton code you give is used in the sandbox and the output is returned to you,"
             " if the code not work, think of trying differents possibilities.\n"
             "The sandbox is just a small lab not a part of the bugged environment and not a part of problem to resolve.\n"
             "So all the code you give, need to be in python code block:\n```python\n<CODE>\n```\n"
-            "Do not use python code block inside python code block !\n"
-            "Try to use several tools at once to speed up the process.\n"
-            "USE A MAXIMUM OF 5 TOOLS AT A TIME !\n"
+            "One code block = one Python snippet.\n"
+            # "Use between 1 and 5 tools at a time.\n"
+            "Use maximum 5 tools at a time.\n"
 
         )
         system_prompt += (
                 f"<SANDBOX_RULES_AND_TOOLS>\n{manual}\n"
                 "<SPECIAL_TOOL>\n"
                 "For more you have a very important special tool to manage the monitoring:\n"
+                "save_missing_info(msg: str)\n"
                 "go_next_step()\n"
-                "exemple usage: ```python\ngo_next_step()\n```\n"
+                "exemple usage:\n```python\ngo_next_step()\n```\n"
                 "follow the instruction to use it correctly\n"
-                "<SPECIAL_TOOL>\n"
+                # "Call go_next_step() alone, never in the same reply as other tools."
+                "</SPECIAL_TOOL>\n"
                 "</SANDBOX_RULES_AND_TOOLS>"
         )
         user_prompt = (
@@ -97,11 +94,12 @@ class SWEBasePrompts:
             "You need to resolve the following problem statement:\n"
             f"<PROBLEM>\n{problem_statement}</PROBLEM>\n"
             "It is entirely up to you to resolve the problem inside the git repository environment accessed with mcp-tools,"
-            " including applie modifications (with available python tools) !\n"
+            " including applie modifications (with available python tools).\n"
             "</MAIN_OBJECTIVE>\n"
         )
         if hints_text:
             user_prompt += f"<MAIN_OBJECTIVE_HINT>\n{hints_text}\n</MAIN_OBJECTIVE_HINT>\n"
+
         return (system_prompt, user_prompt)
 
 
@@ -114,29 +112,74 @@ class SWEAgent(Agent):
     sandbox_config: SandboxConfig
     mcp_tools: dict[str, Any]
 
-    def sandbox_term(self, code: str) -> tuple[str, str]:
+    def get_instruction_prompt(self) -> str:
 
-        sandbox = Sandbox(self.sandbox_config, tools=self.mcp_tools)
-        try:
-            status, value, output = sandbox.run(code + "\n")
-            match status:
-                case "final_answer":
-                    if not value:
-                        Log.print("[final_answer without value !!!]")
-                    return (output, value)
-                case "ok":
-                    return (output, "")
-                case _:
-                    return (f"<ERROR>\n[STDOUT]: {output}\n[ERROR MESSAGE]: {value}\n</ERROR>", "")
-        except Exception:
-            raise
-        finally:
-            sandbox.stop()
+        out = (
+            "<INSTRUCTION>\n\n"
+        )
+        if MemoryPrompt.current_step == "get data":
+            out += (
+                "<INVESTIGATE>\n"
+                "Execute SANDBOX_TOOLS to investigate.\n"
+                "You don't have to act now, focus on the investigation. "
+                "Use only tools to get informations !\n"
+                "Figure out where is located the bug exactly. Changements will be made only later.\n"
+                "Use tools can give you interestings new hints.\n"
+                "\n"
+                "If enough informations are present, use the go_next_step SPECIAL_TOOL.\n"
+                "Do not use the final_answer tool.\n"
+                "</INVESTIGATE>\n"
+            )
+        elif MemoryPrompt.current_step == "modifie":
+            out += (
+                "<ACT>\n"
+                "Execute SANDBOX_TOOLS to modifie/add.\n"
+                "Dependingly informations present. "
+                "Resolve the problem directly.\n"
+                "Modifie files and eventual folder with available tools.\n"
+                "\n"
+                "If all the necessary was modified, use the go_next_step SPECIAL_TOOL.\n"
+                "Do not use the final_answer tool.\n"
+                "</ACT>\n"
+            )
+        elif MemoryPrompt.current_step == "test":
+            out += (
+                "<TEST>\n"
+                "Execute SANDBOX_TOOLS to test !\n"
+                "Use tools for checking the results of previous modifications.\n"
+                "Valid or invalid changes made.\n"
+                "</TEST>\n"
 
+                "\n<REPAIR>\n"
+                "Execute SANBOX_TOOLS to restore invalid previous modifications done."
+                "</REPAIR>\n"
 
-    def create_prompt(self) -> str:
+                "\n<CONTINUE>\n"
+                "If tests are unsuccessful and the main problem is unresolved use the go_next_step SPECIAL_TOOL.\n" 
+                "</CONTINUE>\n"
 
-        out = ""
+                "\n<END>\n"
+                "Only if all tests pass successfully and the main problem is resolved, end the process with final_answer(git_diff: str)\n"
+                "Usage exemple:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
+                "Here git_diff is the string or print given by the command git diff, use another tool to get it !\n"
+                "If tests are unsuccessful and the main problem is unresolved use the go_next_step SPECIAL_TOOL.\n" 
+                "</END>\n"
+            )
+        else:
+            out += (
+                "<SAVE>\n"
+                "Define informations usefull to resolve the PROBLEM and missing from KNOWN_INFO. "
+                "Use the save_missing_info SPECIAL_TOOL to save theses informations !\n"
+                "The function save_missing_info accept every string as argument. "
+                "Use: new fact about the problem argument or what to do or not do next. "
+                "With description and precised file and line\n\n"
+                "If no new information, use the go_next_step SPECIAL_TOOL.\n"
+                "</SAVE>\n"
+            )
+        out += (
+            "\n</INSTRUCTION\n\n>"
+        )
+
         anti_repetition_words = [
             # Nouveauté
             "new", "novel", "fresh", "original", "innovative", "inventive",
@@ -162,91 +205,6 @@ class SWEAgent(Agent):
             "informative", "insightful", "revealing", "enlightening", "illuminating",
             "meaningful", "substantive", "additive", "productive", "fruitful", "useful",
         ]
-
-        if self.executed:
-            info = self.exec_result.strip()
-            if not info:
-                info = "[Your code was executed, but no print occured]"
-            out += (
-                f"<SANDBOX_OUTPUT>\n{info}\n"
-                "</SANDBOX_OUTPUT>\n\n"
-            )
-
-        out += (
-            "<DIRECTIVE>\n\n"
-        )
-        if MemoryPrompt.current_step == "get data":
-            out += (
-                "<INVESTIGATE>\n"
-                "You can execute SANDBOX_TOOLS to investigate !\n"
-                "We need to investigate before acting.\n"
-                "Use only tools to get informations !\n"
-                "We need to figure out where is located the bug exactly before acting.\n"
-                "What tools usage can give you interestings new hints ?\n"
-                "\n"
-                "Do not use tool to modifie files or anything, instead use the go_next_step SPECIAL_TOOL\n"
-                "Do not use the final_answer tool\n"
-                "</INVESTIGATE>\n"
-            )
-        elif MemoryPrompt.current_step == "modifie":
-            out += (
-                "<ACT>\n"
-                "You can execute SANDBOX_TOOLS to act !\n"
-                "Dependingly informations you get.\n"
-                "What to do to resolve the problem ?.\n"
-                "What file(s) you can change or add to resolve the problem ?\n"
-                "\n"
-                "Do not use tool to investigate or test, instead use the go_next_step SPECIAL_TOOL\n"
-                "Do not use the final_answer tool\n"
-                "</ACT>\n"
-            )
-        elif MemoryPrompt.current_step == "test":
-            out += (
-                "<TEST>\n"
-                "You can execute SANDBOX_TOOLS to test !\n"
-                "Use only tools for checking the results."
-                "What test(s) can check and valid changes made ?\n"
-                "</TEST>\n"
-                    
-                "<END>\n"
-                "Only if tests pass and you resolved the main problem, you can end the process with final_answer(git_diff: str)\n"
-                "Usage exemple:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
-                "Here git_diff is the string or print given by the command git diff, use another tool to get it !\n"
-                "</END>\n\n"
-
-                "If tests are not concluant use the go_next_step SPECIAL_TOOL\n"
-            )
-        else:
-            out += (
-                "You need to define informations usefull to resolve the PROBLEM and missing from KNOWN_INFO. "
-                "Use the save_missing_info SPECIAL_TOOL to save theses informations !\n"
-                "exemples :\n"
-                "```python\n"
-                'save_missing_info("the function at ligne <x> in the file exemple.py cause ...")\n'
-                "```\n"
-                "```python\n"
-                'save_missing_info("the error in mainly located in files foo.py and funcs.py ...")\n'
-                "```\n"
-                "```python\n"
-                'save_missing_info("i think the problem can be fixed with ...")\n'
-                "```\n"
-                "```python\n"
-                'save_missing_info("the file file.py was modified, but created a new bug, we need to restore files")\n'
-                "```\n"
-            )
-            MemoryPrompt.current_step = "reset"
-
-        out += (
-            "\n</DIRECTIVE\n\n>"
-        )
-        out += (
-            "<INSTRUCTION\n>"
-            "Follow the DIRECTIVE"
-            "Respond with Python codeblock(s) only, without comments.\n\n"
-            "USE A MAXIMUM OF 5 TOOLS !\n"
-            "</INSTRUCTION\n>"
-        )
-
         magic1 = random.choice(anti_repetition_words)
         while 1:
             magic2 = random.choice(anti_repetition_words) 
@@ -256,8 +214,43 @@ class SWEAgent(Agent):
 
         return out
 
+    def create_prompt(self) -> str:
+
+        out = ""
+
+        if self.executed:
+            info = self.exec_result.strip()
+            if not info.replace("''", "", 1).strip():
+                info = "[Code executed, but no print occured]"
+            out += (
+                f"<SANDBOX_OUTPUT>\n{info}\n"
+                "</SANDBOX_OUTPUT>\n\n"
+            )
+        out += self.get_instruction_prompt()
+
+        return out
+
     def check_solution(self) -> tuple[bool, str]:
         return (True, "no error")
+
+    def sandbox_term(self, code: str) -> tuple[str, str]:
+
+        sandbox = Sandbox(self.sandbox_config, tools=self.mcp_tools)
+        try:
+            status, value, output = sandbox.run(code + "\n")
+            match status:
+                case "final_answer":
+                    if not value:
+                        Log.print("[final_answer without value !!!]")
+                    return (output, value)
+                case "ok":
+                    return (output, "")
+                case _:
+                    return (f"<ERROR>\n[STDOUT]: {output}\n[ERROR MESSAGE]: {value}\n</ERROR>", "")
+        except Exception:
+            raise
+        finally:
+            sandbox.stop()
 
 
 def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
@@ -277,7 +270,7 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
         manual
     )
     system_prompt, user_prompt = pr
-    MemoryPrompt.init(system_prompt, user_prompt, SWEBasePrompts.get_first_objective())
+    MemoryPrompt.init(system_prompt, user_prompt, True)
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
     agent = SWEAgent(
@@ -288,6 +281,7 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
         sandbox_config=SandboxConfig(),
         demand="memorise"
     )
+    MemoryPrompt.add_message(agent.get_instruction_prompt())
     return agent
 
 

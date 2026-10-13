@@ -81,7 +81,8 @@ class LlmApi:
         for url in self.urls:
             url["client"] = OpenAI(
                 base_url=url["url"],
-                api_key=os.getenv(url["api_key"], "0")
+                api_key=os.getenv(url["api_key"], "0"),
+                timeout=60.0
             )
 
         if baseurl and not basemodel:
@@ -109,7 +110,8 @@ class LlmApi:
                     "name": baseurl, "models": [basemodel],
                     "client": OpenAI(
                         base_url=baseurl,
-                        api_key=os.getenv("EXTRA_API_KEY", "0")
+                        api_key=os.getenv("EXTRA_API_KEY", "0"),
+                        timeout=60.0
                     )
                 })
         if self.iurl == -1:
@@ -216,6 +218,7 @@ class MemoryPrompt:
             "messages": cls.messages,
             "hints": cls.hints,
             "next_step": cls.next_step,
+            "step_memory": cls.step_memory,
             "current_step": cls.current_step,
             "_msg_buffer": cls._msg_buffer
         }
@@ -234,20 +237,22 @@ class MemoryPrompt:
         return out
 
     @classmethod
-    def init(cls, base_prompt_system: str, base_prompt_user: str, launch_objective: str = "") -> None:
+    def init(cls, base_prompt_system: str, base_prompt_user: str, memory_mode: bool = False) -> None:
         cls.memory_mode = False
         cls.go_next = False
 
         cls.messages = [{"role": "system", "content": base_prompt_system}]
-        prompt_user = base_prompt_user + "\n<KNOWN_INFO> no saved data </KNOWN_INFO>"
-        cls.messages.append({"role": "user", "content": prompt_user})
+        cls.messages.append({"role": "user", "content": base_prompt_user})
 
-        if launch_objective:
+        if memory_mode:
             cls.memory_mode = True
             cls.base_user = base_prompt_user
+            cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
+            cls.step_memory = []
             cls.next_step = {
                             "get data": "modifie", "modifie": "test",
-                            "test": "clean memory", "clean memory": "reset"}
+                            "test": "clean memory", "clean memory": "reset",
+                            "reset": "get data"}
             cls.current_step = "get data"
             cls.hints: list[str] = []
 
@@ -262,12 +267,13 @@ class MemoryPrompt:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
-        if hint in cls.hints:
+        if msg in cls.hints:
             print("hint already knowed")
             # TODO IMPLEMENT ERROR CHECKING
 
-        cls.hints.append(hint)
+        cls.hints.append(msg)
         print("hint saved")
+        cls.go_next_step()
         cls.save_data()
 
     # Spceial Method usable by the llm
@@ -275,18 +281,31 @@ class MemoryPrompt:
     def go_next_step(cls) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
+        print(f"step set to {cls.next_step[cls.current_step]}")
         cls.go_next = True
+        cls.step_memory = []
+        cls.save_data()
+
+    @classmethod
+    def check_step_loop(cls) -> None:
+        if len(cls.step_memory) < 2:
+            return
+
+        for i, elem in enumerate(cls.step_memory[:-1], 1):
+            for memory in cls.step_memory[i:]:
+                if elem == memory:
+                    cls.go_next_step()
 
     @classmethod
     def apply_go_next_step(cls) -> None:
+        cls.check_step_loop()
+
         if not cls.go_next:
             return
         cls.go_next = False
 
         cls.current_step = cls.next_step[cls.current_step]
-        print(f"step is now: {cls.current_step}")
-        cls.save_data()
-
+        Log.print(f"step is now: {cls.current_step}")
     
     """ 
     problematic:
@@ -336,16 +355,11 @@ class MemoryPrompt:
 
     @classmethod
     def compress_memory(cls) -> None:
-        
-        if cls.current_step != "clean memory":
-            return
-        cls.current_step = "get data"
-
         cls.messages = cls.messages[:2]
         cls.messages[1]["content"] = cls.base_user + "\n<KNOWN_INFO>\n"
         for i, elem in enumerate(cls.hints, 1):
             cls.messages[1]["content"] += f"[{i}] {elem}\n"
-        cls.messages[1]["content"] += "</KNOWN_INFO>"
+        cls.messages[1]["content"] += "</KNOWN_INFO\n>"
 
         
 
@@ -363,6 +377,8 @@ class MemoryPrompt:
             cls.messages.append({"role": role, "content": msg})
         else:
             cls.messages[-1]["content"] += f"\n{msg}"
+        if cls.memory_mode and role == "assistant":
+            cls.step_memory.append(msg)
 
     @classmethod
     def get_message_codes(cls) -> list[str]:
