@@ -154,18 +154,18 @@ class SWEAgent(Agent):
                 "Execute SANBOX_TOOLS to restore invalid previous modifications done."
                 "</REPAIR>\n"
 
-                "\n<CONTINUE>\n"
-                "If tests are unsuccessful and the main problem is unresolved use the go_next_step SPECIAL_TOOL.\n" 
-                "</CONTINUE>\n"
-
                 "\n<END>\n"
                 "Only if all tests pass successfully and the main problem is resolved, end the process with final_answer(git_diff: str)\n"
                 "Usage exemple:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
                 "Here git_diff is the string or print given by the command git diff, use another tool to get it !\n"
-                "If tests are unsuccessful and the main problem is unresolved use the go_next_step SPECIAL_TOOL.\n" 
+                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
                 "</END>\n"
+
+                "\n<CONTINUE>\n"
+                "If tests are unsuccessful or FAIL and the main problem is unresolved use the go_next_step SPECIAL_TOOL.\n" 
+                "</CONTINUE>\n"
             )
-        else:
+        elif MemoryPrompt.current_step == "clean memory":
             out += (
                 "<SAVE>\n"
                 "Define informations usefull to resolve the PROBLEM and missing from KNOWN_INFO. "
@@ -176,8 +176,10 @@ class SWEAgent(Agent):
                 "If no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "</SAVE>\n"
             )
+        else:
+            raise ValueError("impossible current_step at prompt creation")
         out += (
-            "\n</INSTRUCTION\n\n>"
+            "\nUse multiple tools to speed up the process\n</INSTRUCTION\n\n>"
         )
 
         anti_repetition_words = [

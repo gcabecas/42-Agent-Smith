@@ -263,28 +263,33 @@ class MemoryPrompt:
 
     # Spceial Method usable by the llm
     @classmethod
-    def save_missing_info(cls, msg: str) -> None:
+    def save_missing_info(cls, msg: str, *, save: bool = True) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
         if msg in cls.hints:
             print("hint already knowed")
+            return
             # TODO IMPLEMENT ERROR CHECKING
 
         cls.hints.append(msg)
         print("hint saved")
-        cls.go_next_step()
-        cls.save_data()
+        if save:
+            cls.go_next_step()
+            cls.save_data()
+        else:
+            cls.go_next_step(save=False)
 
     # Spceial Method usable by the llm
     @classmethod
-    def go_next_step(cls) -> None:
+    def go_next_step(cls, *, save: bool = True) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
         print(f"step set to {cls.next_step[cls.current_step]}")
         cls.go_next = True
         cls.step_memory = []
-        cls.save_data()
+        if save:
+            cls.save_data()
 
     @classmethod
     def check_step_loop(cls) -> None:
@@ -294,7 +299,9 @@ class MemoryPrompt:
         for i, elem in enumerate(cls.step_memory[:-1], 1):
             for memory in cls.step_memory[i:]:
                 if elem == memory:
-                    cls.go_next_step()
+                    cls.go_next_step(save=False)
+                    return
+
 
     @classmethod
     def apply_go_next_step(cls) -> None:
@@ -305,63 +312,19 @@ class MemoryPrompt:
         cls.go_next = False
 
         cls.current_step = cls.next_step[cls.current_step]
+        if cls.current_step == "reset":
+            cls.compress_memory()
+            cls.current_step = cls.next_step[cls.current_step]
         Log.print(f"step is now: {cls.current_step}")
     
-    """ 
-    problematic:
-        1 create a efficient memory manager for prompting
-        2 how guide the llm to resolve the problem
-
-    NEW PIEPLINE : 
-    Idea 1:
-        prompt rolling: 3 phases (3 prompt possible)
-            1:
-                get data
-            2:
-                modifie something
-            3:
-                test
-            then:
-                RESET THE ENVIRONEMENT
-                CLEAN THE PROMPT
-                new hint created !
-
-        how switch phase:
-            llm using tool next_phase()
-            error detected:
-                infinite repetition
-                too many tokens used
-                
-        possible problems:
-            large infinite loop using the rolling system
-            prompt too large
-
-    SPECIAL TOOLS:
-        go_next_phase() ???
-        save_hint(msg: str) ???
-
-    possible prompt structure:
-        1:
-            system : all basics
-            user:
-                phase prompt
-                MEMORY:
-                    <hint>
-                    <hint>
-                    <output1>
-                    <output2>
-                    ...
-    """ 
-
     @classmethod
     def compress_memory(cls) -> None:
+
         cls.messages = cls.messages[:2]
         cls.messages[1]["content"] = cls.base_user + "\n<KNOWN_INFO>\n"
         for i, elem in enumerate(cls.hints, 1):
             cls.messages[1]["content"] += f"[{i}] {elem}\n"
         cls.messages[1]["content"] += "</KNOWN_INFO\n>"
-
-        
 
     def hard_compress_memory(cls) -> None:
         # TODO

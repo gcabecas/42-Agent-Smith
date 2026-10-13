@@ -162,8 +162,6 @@ print("bye")
 
         self.set_step_data(new, resp, start)
         if MemoryPrompt.memory_mode:
-            if MemoryPrompt.current_step == "reset":
-                MemoryPrompt.compress_memory()
             MemoryPrompt.apply_go_next_step()
             prompt = self.create_prompt()
             MemoryPrompt.apply_buffer()
@@ -172,7 +170,7 @@ print("bye")
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
 
-        if DEBUG and NDEBUG == 4:  # TODO
+        if DEBUG and NDEBUG == 10:  # TODO
             return False
         else:
             return True
