@@ -107,6 +107,11 @@ class NewMBPPTaskInput(BaseModel):
 
 class MBPPAgent(Agent):
 
+    max_input_tokens: int = 6000
+    max_output_tokens: int = 1500
+    max_steps: int = 10
+    timeout: float = 120  # TODO
+
     test_list: list[str]
     sandbox_cmd: list[str]
 

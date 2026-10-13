@@ -71,7 +71,7 @@ class SolutionOutput(BaseModel):
     system_prompt: str = Field(
         description="Full system prompt sen to the LLM (for provenance checking)")
     error: Optional[str] = Field(
-        default=None, description="Error message i the agent failed (None if successful)")
+        default="", description="Error message i the agent failed (None if successful)")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(
     ), description="ISO 8601 timestamp of when the solution was produced")
 
@@ -157,6 +157,7 @@ print("bye")
                 if final:
                     self.solution = final
                     self.set_step_data(new, resp, start)
+                    self.success = True
                     return False
             self.exec_result = new.sandbox_output
 
@@ -169,6 +170,17 @@ print("bye")
         else:
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
+
+        msg = ""
+        if self.total_input_tokens >= self.max_input_tokens:
+            msg += f"Input tokens out of limits: {self.max_input_tokens}\n"
+        if self.total_output_tokens >= self.max_output_tokens:
+            msg += f"Output tokens out of limits: {self.max_output_tokens}\n"
+        if len(self.steps) >= self.max_steps:
+            msg += f"Steps out of limits: {self.max_steps}\n"
+        if msg:
+            self.error = msg
+            return False
 
         if DEBUG and NDEBUG == 10:  # TODO
             return False
@@ -198,7 +210,12 @@ print("bye")
             timestamp=self.timestamp
         )
 
-        output.success, output.error = self.check_solution()
+        success, error = self.check_solution()
+        output.error += error
+        output.success = (
+                output.success and
+                success
+        )
 
         try:
             with open(self.output_path, "w") as f_open:

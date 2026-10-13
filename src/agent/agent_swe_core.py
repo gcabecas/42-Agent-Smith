@@ -109,6 +109,11 @@ class NewSWETaskInput(BaseModel):
 
 class SWEAgent(Agent):
 
+    max_input_tokens: int = 300000
+    max_output_tokens: int = 10000
+    max_steps: int = 30
+    timeout: float = 900  # TODO
+
     sandbox_config: SandboxConfig
     mcp_tools: dict[str, Any]
 
@@ -233,7 +238,10 @@ class SWEAgent(Agent):
         return out
 
     def check_solution(self) -> tuple[bool, str]:
-        return (True, "no error")
+        read, final = self.sandbox_term("run_tests()")
+        if "[OK]" in read:
+            return (True, "")
+        return (False, "no '[OK]' in test script output")
 
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
