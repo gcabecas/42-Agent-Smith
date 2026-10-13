@@ -81,11 +81,12 @@ class SWEBasePrompts:
                 f"<SANDBOX_RULES_AND_TOOLS>\n{manual}\n"
                 "<SPECIAL_TOOL>\n"
                 "For more you have a very important special tool to manage the monitoring:\n"
-                "save_missing_info(msg: str)\n"
                 "go_next_step()\n"
+                "save_missing_info(msg: str)\n"
+                "propose_hypothesis(cls, files: list[str], msg: str)\n"
+                "rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
                 "exemple usage:\n```python\ngo_next_step()\n```\n"
                 "follow the instruction to use it correctly\n"
-                # "Call go_next_step() alone, never in the same reply as other tools."
                 "</SPECIAL_TOOL>\n"
                 "</SANDBOX_RULES_AND_TOOLS>"
         )
@@ -131,13 +132,14 @@ class SWEAgent(Agent):
                 "Figure out where is located the bug exactly. Changements will be made only later.\n"
                 "Use tools can give you interestings new hints.\n"
                 "\n"
-                "If enough informations are present, use the go_next_step SPECIAL_TOOL.\n"
+                "If enough informations are present, use the propose_hypothesis SPECIAL_TOOL.\n"
                 "Do not use the final_answer tool.\n"
                 "</INVESTIGATE>\n"
             )
         elif MemoryPrompt.current_step == "modifie":
             out += (
                 "<ACT>\n"
+                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Execute SANDBOX_TOOLS to modifie/add.\n"
                 "Dependingly informations present. "
                 "Resolve the problem directly.\n"
@@ -150,6 +152,7 @@ class SWEAgent(Agent):
         elif MemoryPrompt.current_step == "test":
             out += (
                 "<TEST>\n"
+                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Execute SANDBOX_TOOLS to test !\n"
                 "Use tools for checking the results of previous modifications.\n"
                 "Valid or invalid changes made.\n"
@@ -167,24 +170,42 @@ class SWEAgent(Agent):
                 "</END>\n"
 
                 "\n<CONTINUE>\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved use the go_next_step SPECIAL_TOOL.\n" 
+                "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n" 
                 "</CONTINUE>\n"
             )
         elif MemoryPrompt.current_step == "clean memory":
             out += (
+                "<SAVED_HYPOTHESIS>\n"
+                f"{str(MemoryPrompt.hypothesis[-1])}\n"
+                "<SAVED_HYPOTHESIS>\n"
                 "<SAVE>\n"
                 "Define informations usefull to resolve the PROBLEM and missing from KNOWN_INFO. "
                 "Use the save_missing_info SPECIAL_TOOL to save theses informations !\n"
                 "The function save_missing_info accept every string as argument. "
-                "Use: new fact about the problem argument or what to do or not do next. "
+                "Use new fact about the problem argument or what to do or not do next. "
                 "With description and precised file and line\n\n"
                 "If no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "</SAVE>\n"
             )
+        elif MemoryPrompt.current_step == "hypothesis":
+            out += (
+                "<PROPOSE_HYPOTHESIS>\n"
+                "Check already exlored HYPOTHESES and new informations to propose a new one.\n"
+                "For this use SPECIAL_TOOL: propose_hypothesis(cls, files: list[str], msg: str)\n"
+                "</PROPOSE_HYPOTHESIS>\n"
+            )
+        elif MemoryPrompt.current_step == "rule on":
+            out += (
+                "<RULE_ON_HYPOTHESIS>\n"
+                "Check previous informations to respond to the following hypothesis:\n"
+                f"{MemoryPrompt.hypotesis[-1]['hyp']}"
+                "For this use SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
+                "</RULE_ON_HYPOTHESIS>\n"
+            )
         else:
             raise ValueError("impossible current_step at prompt creation")
         out += (
-            "\nUse multiple tools to speed up the process\n</INSTRUCTION\n\n>"
+            "\nUse multiple tools to speed up the process\n</INSTRUCTION>"
         )
 
         anti_repetition_words = [

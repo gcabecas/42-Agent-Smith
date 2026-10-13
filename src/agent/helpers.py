@@ -217,6 +217,7 @@ class MemoryPrompt:
             "base_user": cls.base_user,
             "messages": cls.messages,
             "hints": cls.hints,
+            "hypothesis": cls.hypothesis,
             "next_step": cls.next_step,
             "step_memory": cls.step_memory,
             "current_step": cls.current_step,
@@ -250,11 +251,15 @@ class MemoryPrompt:
             cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
             cls.step_memory = []
             cls.next_step = {
-                            "get data": "modifie", "modifie": "test",
-                            "test": "clean memory", "clean memory": "reset",
-                            "reset": "get data"}
+                            "get data": "hypothesis", "hypothesis": "modifie",
+                            "modifie": "test", "test": "rule on",
+                            "rule on": "clean memory",
+                            "clean memory": "reset",
+                            "reset": "get data"
+            }
             cls.current_step = "get data"
             cls.hints: list[str] = []
+            cls.hypothesis: list[dict[str, str]] = []
 
     @classmethod
     def apply_buffer(cls) -> None:
@@ -263,7 +268,7 @@ class MemoryPrompt:
 
     # Spceial Method usable by the llm
     @classmethod
-    def save_missing_info(cls, msg: str, *, save: bool = True) -> None:
+    def save_missing_info(cls, msg: str) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
 
@@ -274,22 +279,78 @@ class MemoryPrompt:
 
         cls.hints.append(msg)
         print("hint saved")
-        if save:
-            cls.go_next_step()
-            cls.save_data()
-        else:
-            cls.go_next_step(save=False)
+        cls.go_next_step()
+        cls.save_data()
 
     # Spceial Method usable by the llm
     @classmethod
-    def go_next_step(cls, *, save: bool = True) -> None:
+    def go_next_step(cls) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
+        if cls.current_step in ["get_data", "test"]:
+            raise ValueError("Impossible to use go_next_step in the current phase")
+
         print(f"step set to {cls.next_step[cls.current_step]}")
         cls.go_next = True
         cls.step_memory = []
-        if save:
-            cls.save_data()
+        cls.save_data()
+
+    @classmethod
+    def simple_go_next_step(cls) -> None:
+        if not cls.memory_mode:
+            raise MemoryPromptError("Memory mode not configured")
+
+        print(f"step set to {cls.next_step[cls.current_step]}")
+        cls.go_next = True
+        cls.step_memory = []
+
+    class CheckHypArgs(BaseModel):
+        files: list[str]
+        msg: str
+
+    # Spceial Method usable by the llm
+    @classmethod
+    def propose_hypothesis(cls, files: list[str], msg: str) -> None:
+        try:
+            CheckHypArgs(files=files, msg=msg)
+        except Exception:
+            raise ValueError("files argument need to be a list of strings, and msg a string")
+
+        hyp = f"{msg} | [{', '.join(files)}]"
+
+        for elem in cls.hypothesis:
+            if elem["hyp"] == hyp:
+                print("this hypothesis has already been explored")
+                if cls.current_step == "get data":
+                    cls.simple_go_next_step()
+                    cls.save_data()
+                return
+
+        print("new hypothesis engaged")
+        cls.hypothesis.append({"hyp": hyp})
+        cls.current_step = "hypothesis"
+        cls.simple_go_next_step()
+        cls.save_data()
+
+    # Spceial Method usable by the llm
+    @classmethod
+    def rule_on_hypothesis(cls, verdict: str, evidence: str) -> None:
+
+        rule_on = f"verdict: {verdict} | evidence: {evidence}"
+
+        for elem in cls.hypothesis:
+            if elem.get("rule on") == rule_on:
+                print("rule_on_hypothesis rejected: this ruling already exists")
+                if cls.current_step == "test":
+                    cls.simple_go_next_step()
+                    cls.save_data()
+                return
+
+        print("rule_on_hypothesis validated")
+        cls.hypothesis[-1]["rule on"] = rule_on
+        cls.current_step = "rule on"
+        cls.simple_go_next_step()
+        cls.save_data()
 
     @classmethod
     def check_step_loop(cls) -> None:
@@ -299,9 +360,8 @@ class MemoryPrompt:
         for i, elem in enumerate(cls.step_memory[:-1], 1):
             for memory in cls.step_memory[i:]:
                 if elem == memory:
-                    cls.go_next_step(save=False)
+                    cls.simple_go_next_step()
                     return
-
 
     @classmethod
     def apply_go_next_step(cls) -> None:
@@ -321,14 +381,18 @@ class MemoryPrompt:
     def compress_memory(cls) -> None:
 
         cls.messages = cls.messages[:2]
-        cls.messages[1]["content"] = cls.base_user + "\n<KNOWN_INFO>\n"
-        for i, elem in enumerate(cls.hints, 1):
-            cls.messages[1]["content"] += f"[{i}] {elem}\n"
-        cls.messages[1]["content"] += "</KNOWN_INFO\n>"
 
-    def hard_compress_memory(cls) -> None:
-        # TODO
-        pass
+        msg = cls.base_user + "\n<KNOWN_INFO>\n"
+        for i, elem in enumerate(cls.hints, 1):
+            msg += f"[{i}] {elem}\n"
+        if cls.hypothesis:
+            msg += "<HYPOTHESES>\n"
+            for elem in hypothesis:
+                msg += f"{elem['hyp']} | {elem['rule on']}"
+            msg += "</HYPOTHESES>\n"
+
+        msg += "</KNOWN_INFO\n>"
+        cls.messages[1]["content"] = msg
 
     @classmethod
     def get_messages(cls) -> list[dict[str, str]]:

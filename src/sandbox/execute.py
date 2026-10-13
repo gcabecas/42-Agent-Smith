@@ -82,6 +82,8 @@ def _loop(pipe: Connection, config: SandboxConfig,
 
     exec_builtins["go_next_step"] = MemoryPrompt.go_next_step
     exec_builtins["save_missing_info"] = MemoryPrompt.save_missing_info
+    exec_builtins["propose_hypothesis"] = MemoryPrompt.propose_hypothesis
+    exec_builtins["rule_on_hypothesis"] = MemoryPrompt.rule_on_hypothesis
 
     exec_builtins["_get_new_prompt_data"] = MemoryPrompt._get_new_prompt_data
 
