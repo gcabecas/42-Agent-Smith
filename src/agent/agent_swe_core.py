@@ -154,6 +154,11 @@ class SWEAgent(Agent):
             )
         elif MemoryPrompt.current_step == "test":
             out += (
+                "\n<PRIMAL_DIRECTIVE>\n"
+                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
+                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
+                "</PRIMAL_DIRECTIVE>\n"
+
                 f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
                 "<TEST>\n"
                 "Execute SANDBOX_TOOLS to test !\n"
@@ -164,14 +169,14 @@ class SWEAgent(Agent):
                 "\n<CONTINUE>\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n" 
                 "</CONTINUE>\n"
-
-                "\n<SUCCESS_END>\n"
-                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
-                "</SUCCESS_END>\n"
             )
         elif MemoryPrompt.current_step == "clean memory":
             out += (
+                "\n<PRIMAL_DIRECTIVE>\n"
+                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
+                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
+                "</PRIMAL_DIRECTIVE>\n"
+
                 "<SAVE>\n"
                 "WARNING: after this step the repository is RESET to its original state. "
                 "ALL the modifications you made are DELETED and will not exist anymore. "
@@ -189,12 +194,7 @@ class SWEAgent(Agent):
                 "If no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "</SAVE>\n"
 
-                "\n<SUCCESS_END>\n"
-                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
-                "</SUCCESS_END>\n"
-
-                "\nWhen a directive (e.g. <BANNER>...</BANNER>) calls for tool use, run independent tool calls in parallel when possible.\n"
+                "\nRun every tool calls needed in parallel.\n"
                 "</INSTRUCTION>"
             )
         elif MemoryPrompt.current_step == "hypothesis":
