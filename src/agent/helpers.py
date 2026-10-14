@@ -312,9 +312,12 @@ class MemoryPrompt:
     @classmethod
     def propose_hypothesis(cls, files: list[str], msg: str) -> None:
         try:
-            CheckHypArgs(files=files, msg=msg)
+            cls.CheckHypArgs(files=files, msg=msg)
         except Exception:
             raise ValueError("files argument need to be a list of strings, and msg a string")
+        if cls.current_step not in ["get data", "hypothesis"]:
+            print("You need to be asked to use this function")
+            return
 
         hyp = f"{msg} | [{', '.join(files)}]"
 
@@ -335,6 +338,9 @@ class MemoryPrompt:
     # Spceial Method usable by the llm
     @classmethod
     def rule_on_hypothesis(cls, verdict: str, evidence: str) -> None:
+        if cls.current_step not in ["test", "rule on"]:
+            print("You need to be asked to use this function")
+            return
 
         rule_on = f"verdict: {verdict} | evidence: {evidence}"
 
