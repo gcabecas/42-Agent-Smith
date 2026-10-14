@@ -126,7 +126,6 @@ class LlmApi:
 
         retries = 0
 
-        Log.print("[sending llm demand ..]")
         while 1:
             try:
                 params = {
@@ -136,6 +135,7 @@ class LlmApi:
                 }
                 self.requests += 1
                 try:
+                    Log.print(f"[sending llm '{self.get_current()}' demand ...]")
                     response = self.urls[self.iurl]["client"].chat.completions.create(
                         **params)
                     output = response.choices[0].message.content
@@ -364,12 +364,13 @@ class MemoryPrompt:
     def check_step_loop(cls) -> None:
         if len(cls.step_memory) < 2:
             return
-
-        for i, elem in enumerate(cls.step_memory[:-1], 1):
-            for memory in cls.step_memory[i:]:
-                if elem == memory:
-                    cls.simple_go_next_step()
-                    return
+        
+        if cls.current_step not in ["hypothesis", "rule on"]:
+            for i, elem in enumerate(cls.step_memory[:-1], 1):
+                for memory in cls.step_memory[i:]:
+                    if elem == memory:
+                        cls.simple_go_next_step()
+                        return
 
     @classmethod
     def apply_go_next_step(cls, testbed: DockerTestbed) -> None:

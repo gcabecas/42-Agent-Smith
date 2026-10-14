@@ -60,6 +60,7 @@ class SWEBasePrompts:
                                 hints_text: list[str], manual: str) -> tuple[str, str]:
 
         system_prompt = (
+            "You have to use only text, every tools are executed in text python code blocks.\n"
             "You are a software engineering coding agent "
             "specialised to resolve SWE bench problems.\n"
             "You need to resolve a problem inside a git repository containing bugged files.\n"
@@ -159,6 +160,10 @@ class SWEAgent(Agent):
                 "Use tools for checking the results of previous modifications.\n"
                 "Valid or invalid changes made.\n"
                 "</TEST>\n"
+
+                # "\n<REPAIR>\n"
+                # "Eventually execute SANBOX_TOOLS to restore invalid previous modifications done."
+                # "</REPAIR>\n"
 
                 "\n<CONTINUE>\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n" 
