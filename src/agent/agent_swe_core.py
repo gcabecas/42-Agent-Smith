@@ -126,14 +126,16 @@ class SWEAgent(Agent):
         out = (
             "<INSTRUCTION>\n\n"
         )
-        if MemoryPrompt.current_step == "get data":
+        if MemoryPrompt.current_step == "investigate":
             out += (
                 "<INVESTIGATE>\n"
                 "Execute SANDBOX_TOOLS to investigate.\n"
-                "You don't have to act now, focus on the investigation. "
+                "Based on all the current information obtained.\n"
+                "You don't have to modifie now, focus on the investigation. "
                 "Use only tools to get informations !\n"
                 "Figure out where is located the bug exactly. Changements will be made only later.\n"
                 "Use tools can give you interestings new hints.\n"
+                "Optimise your tool usage and try find very usefull informations.\n"
                 "\n"
                 "If enough informations are present, use the propose_hypothesis SPECIAL_TOOL.\n"
                 "Do not use the final_answer tool.\n"
@@ -142,24 +144,23 @@ class SWEAgent(Agent):
         elif MemoryPrompt.current_step == "modifie":
             out += (
                 f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
-                "<ACT>\n"
+                "<MODIFIE>\n"
                 "Execute SANDBOX_TOOLS to modifie/add.\n"
-                "Dependingly informations present. "
+                "Based on informations getted through INVESTIGATE and KNOWN_DATA. "
                 "Resolve the problem directly.\n"
                 "Modifie files and eventual folder with available tools.\n"
                 "\n"
                 "If all the necessary was modified, use the go_next_step SPECIAL_TOOL.\n"
                 "Do not use the final_answer tool.\n"
-                "</ACT>\n"
+                "</MODIFIE>\n"
             )
         elif MemoryPrompt.current_step == "test":
             out += (
-                "\n<PRIMAL_DIRECTIVE>\n"
+                '<PRIMAL_DIRECTIVE priority="ABSOLUTE">\n'
                 "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
                 "</PRIMAL_DIRECTIVE>\n"
 
-                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
+                f"\nHYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
                 "<TEST>\n"
                 "Execute SANDBOX_TOOLS to test !\n"
                 "Use tools for checking the results of previous modifications.\n"
@@ -167,14 +168,14 @@ class SWEAgent(Agent):
                 "</TEST>\n"
 
                 "\n<CONTINUE>\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n" 
+                "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n"
                 "</CONTINUE>\n"
             )
         elif MemoryPrompt.current_step == "clean memory":
             out += (
-                "\n<PRIMAL_DIRECTIVE>\n"
-                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
+                '<PRIMAL_DIRECTIVE priority="ABSOLUTE">\n'
+                "If all TESTS pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
+                "If TESTS are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
                 "</PRIMAL_DIRECTIVE>\n"
 
                 "<SAVE>\n"
@@ -191,9 +192,9 @@ class SWEAgent(Agent):
                 "- Precised file and line\n\n"
                 "Save only informations to solve the problem from scratch, "
                 "do not count on your current modifications being there.\n"
-                "If no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "</SAVE>\n"
 
+                "\nIf no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "\nRun every tool calls needed in parallel.\n"
                 "</INSTRUCTION>"
             )

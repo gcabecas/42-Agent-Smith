@@ -122,7 +122,7 @@ class LlmApi:
             self.imodel = len(self.urls[self.iurl]["models"]) - 1
 
 
-    def response(self, messages: list[dict[str, str | int]], temperature: int = 0.1) -> dict[str, str | int]:
+    def response(self, messages: list[dict[str, str | int]], temperature: float = 0.1) -> dict[str, str | int]:
 
         retries = 0
 
@@ -223,6 +223,7 @@ class MemoryPrompt:
             "next_step": cls.next_step,
             "step_memory": cls.step_memory,
             "current_step": cls.current_step,
+            "previous_step": cls.previous_step
         }
         cls._new_data = data
 
@@ -252,13 +253,14 @@ class MemoryPrompt:
             cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
             cls.step_memory = []
             cls.next_step = {
-                            "get data": "hypothesis", "hypothesis": "modifie",
+                            "investigate": "hypothesis", "hypothesis": "modifie",
                             "modifie": "test", "test": "rule on",
                             "rule on": "clean memory",
                             "clean memory": "reset",
-                            "reset": "get data"
+                            "reset": "investigate"
             }
-            cls.current_step = "get data"
+            cls.current_step = "investigate"
+            cls.previous_step = "investigate"
             cls.hints: list[str] = []
             cls.hypothesis: list[dict[str, str]] = []
 
@@ -283,7 +285,7 @@ class MemoryPrompt:
     def go_next_step(cls) -> None:
         if not cls.memory_mode:
             raise MemoryPromptError("Memory mode not configured")
-        if cls.current_step in ["get_data", "test"]:
+        if cls.current_step in ["investigate", "test"]:
             raise ValueError("Impossible to use go_next_step in the current phase")
 
         print(f"step set to {cls.next_step[cls.current_step]}")
@@ -311,7 +313,7 @@ class MemoryPrompt:
             cls.CheckHypArgs(files=files, msg=msg)
         except Exception:
             raise ValueError("files argument need to be a list of strings, and msg a string")
-        if cls.current_step not in ["get data", "hypothesis"]:
+        if cls.current_step not in ["investigate", "hypothesis"]:
             print("You need to be asked to use this function")
             return
 
@@ -320,10 +322,9 @@ class MemoryPrompt:
         for elem in cls.hypothesis:
             if elem["hyp"] == hyp:
                 print(
-                    "this hypothesis has already been explored : "
-                    f"{elem['hyp']} | {elem['rule on']}"
+                    "this hypothesis has already been explored, find something newer not in KNOWN_INFO !"
                 )
-                if cls.current_step == "get data":
+                if cls.current_step == "investigate":
                     cls.simple_go_next_step()
                     cls.save_data()
                 return
@@ -346,8 +347,7 @@ class MemoryPrompt:
         for elem in cls.hypothesis:
             if elem.get("rule on") == rule_on:
                 print(
-                    "rule_on_hypothesis rejected: this ruling already exists : "
-                    f"{elem['hyp']} | {elem['rule on']}"
+                    "rule_on_hypothesis rejected, this ruling already exists, find something newer not in KNOWN_INFO !"
                 )
                 if cls.current_step == "test":
                     cls.simple_go_next_step()
@@ -415,13 +415,19 @@ class MemoryPrompt:
 
     @classmethod
     def compress_user_msg(cls, steps: list[StepMetrics]) -> None:
+
         if len(cls.messages) == 3:
             cls.messages[-2]["content"] = cls.new_base_user_prompt()
         else:
             info = steps[-2].sandbox_output
             if not info.replace("''", "", 1).strip():
                 info = "'[Code executed, but no print occured]'"
-            cls.messages[-2]["content"] = f"<OUTPUT>\n{info}\n</OUTPUT>"
+            cls.messages[-2]["content"] = (
+                    f"<{cls.previous_step.upper()}_OUTPUT>"
+                    f"\n{info}\n"
+                    f"</{cls.previous_step.upper()}_OUTPUT>"
+            )
+        cls.previous_step = cls.current_step
 
     @classmethod
     def get_messages(cls) -> list[dict[str, str]]:
@@ -434,7 +440,7 @@ class MemoryPrompt:
         else:
             cls.messages[-1]["content"] += f"\n{msg}"
         if cls.memory_mode and role == "assistant":
-            cls.step_memory.append(msg)
+            cls.step_memory.append(msg.strip())
 
     @classmethod
     def get_message_codes(cls) -> list[str]:

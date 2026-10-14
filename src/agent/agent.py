@@ -108,8 +108,14 @@ print("bye")
                 "retries": 0
             }
         else:
-            Log.print(f"step is now: {MemoryPrompt.current_step}")  # TODO not exist in mbpp tests
-            resp = self.llmapi.response(MemoryPrompt.messages)
+            if MemoryPrompt.memory_mode:
+                Log.print(f"step is now: {MemoryPrompt.current_step}")
+                if MemoryPrompt.current_step in ["clean memory", "hypothesis", "rule on"]:
+                    resp = self.llmapi.response(MemoryPrompt.messages, 0.6)
+                else:
+                    resp = self.llmapi.response(MemoryPrompt.messages)
+            else:
+                resp = self.llmapi.response(MemoryPrompt.messages)
 
         MemoryPrompt.add_message(resp["llm_output"], "assistant")
         codes = MemoryPrompt.get_message_codes()
