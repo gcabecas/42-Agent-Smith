@@ -61,6 +61,7 @@ class SWEBasePrompts:
 
         system_prompt = (
             "You have to use only text, every tools are executed in text python code blocks.\n"
+
             "You are a software engineering coding agent "
             "specialised to resolve SWE bench problems.\n"
             "You need to resolve a problem inside a git repository containing bugged files.\n"
@@ -74,7 +75,6 @@ class SWEBasePrompts:
             "The sandbox is just a small lab not a part of the bugged environment and not a part of problem to resolve.\n"
             "So all the code you give, need to be in python code block:\n```python\n<CODE>\n```\n"
             "One code block = one Python snippet.\n"
-            "Use maximum 5 tools at a time.\n"
 
         )
         system_prompt += (
@@ -141,8 +141,8 @@ class SWEAgent(Agent):
             )
         elif MemoryPrompt.current_step == "modifie":
             out += (
+                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
                 "<ACT>\n"
-                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Execute SANDBOX_TOOLS to modifie/add.\n"
                 "Dependingly informations present. "
                 "Resolve the problem directly.\n"
@@ -154,16 +154,12 @@ class SWEAgent(Agent):
             )
         elif MemoryPrompt.current_step == "test":
             out += (
+                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
                 "<TEST>\n"
-                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Execute SANDBOX_TOOLS to test !\n"
                 "Use tools for checking the results of previous modifications.\n"
                 "Valid or invalid changes made.\n"
                 "</TEST>\n"
-
-                # "\n<REPAIR>\n"
-                # "Eventually execute SANBOX_TOOLS to restore invalid previous modifications done."
-                # "</REPAIR>\n"
 
                 "\n<CONTINUE>\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n" 
@@ -177,6 +173,9 @@ class SWEAgent(Agent):
         elif MemoryPrompt.current_step == "clean memory":
             out += (
                 "<SAVE>\n"
+                "WARNING: after this step the repository is RESET to its original state. "
+                "ALL the modifications you made are DELETED and will not exist anymore. "
+                "Only the information saved with save_missing_info is kept for the next attempt.\n"
                 "Define informations usefull to resolve the PROBLEM and missing from KNOWN_INFO. "
                 "Use the save_missing_info SPECIAL_TOOL to save theses informations !\n"
                 "The function save_missing_info accept every string as argument.\n"
@@ -185,7 +184,8 @@ class SWEAgent(Agent):
                 "- What to do or not do next\n"
                 "- Description\n"
                 "- Precised file and line\n\n"
-                "Warning all files will be reset, save only informations to solve the problem from sratch."
+                "Save only informations to solve the problem from scratch, "
+                "do not count on your current modifications being there.\n"
                 "If no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "</SAVE>\n"
 
@@ -193,6 +193,9 @@ class SWEAgent(Agent):
                 "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
                 "</SUCCESS_END>\n"
+
+                "\nWhen a directive (e.g. <BANNER>...</BANNER>) calls for tool use, run independent tool calls in parallel when possible.\n"
+                "</INSTRUCTION>"
             )
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
@@ -204,8 +207,8 @@ class SWEAgent(Agent):
         elif MemoryPrompt.current_step == "rule on":
             out += (
                 "<RULE_ON_HYPOTHESIS>\n"
-                "Check all new informations (informations not in KNOWN_INFO) to respond  to the following hypothesis:\n"
-                f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"'
+                "Review all available information, including new evidence outside KNOWN_INFO, to reassess the following hypothesis and provide a well-supported verdict: "
+                f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"\n'
                 "For this use SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
                 "</RULE_ON_HYPOTHESIS>\n"
 
@@ -216,9 +219,11 @@ class SWEAgent(Agent):
             )
         else:
             raise ValueError("impossible current_step at prompt creation")
-        out += (
-            "\nUse multiple tools to speed up the process\n</INSTRUCTION>"
-        )
+        if MemoryPrompt.current_step != "clean memory":
+            out += (
+                "\nUse one only tool and wait for its result.\n"
+                "</INSTRUCTION>"
+            )
 
         return out
 
