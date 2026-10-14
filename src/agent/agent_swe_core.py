@@ -73,7 +73,6 @@ class SWEBasePrompts:
             "The sandbox is just a small lab not a part of the bugged environment and not a part of problem to resolve.\n"
             "So all the code you give, need to be in python code block:\n```python\n<CODE>\n```\n"
             "One code block = one Python snippet.\n"
-            # "Use between 1 and 5 tools at a time.\n"
             "Use maximum 5 tools at a time.\n"
 
         )
@@ -85,7 +84,9 @@ class SWEBasePrompts:
                 "save_missing_info(msg: str)\n"
                 "propose_hypothesis(files: list[str], msg: str)\n"
                 "rule_on_hypothesis(verdict: str, evidence: str)\n"
-                "exemple usage:\n```python\ngo_next_step()\n```\n"
+                "final_answer(git_diff: str)\n"
+                "exemple of use:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
+                "Here git_diff is the string or print given by the command git diff, use another tool to get it !\n"
                 "follow the instruction to use it correctly\n"
                 "</SPECIAL_TOOL>\n"
                 "</SANDBOX_RULES_AND_TOOLS>"
@@ -117,6 +118,7 @@ class SWEAgent(Agent):
 
     sandbox_config: SandboxConfig
     mcp_tools: dict[str, Any]
+    testbed: DockerTestbed
 
     def get_instruction_prompt(self) -> str:
 
@@ -158,87 +160,60 @@ class SWEAgent(Agent):
                 "Valid or invalid changes made.\n"
                 "</TEST>\n"
 
-                "\n<REPAIR>\n"
-                "Execute SANBOX_TOOLS to restore invalid previous modifications done."
-                "</REPAIR>\n"
-
-                "\n<END>\n"
-                "Only if all tests pass successfully and the main problem is resolved, end the process with final_answer(git_diff: str)\n"
-                "Usage exemple:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
-                "Here git_diff is the string or print given by the command git diff, use another tool to get it !\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
-                "</END>\n"
-
                 "\n<CONTINUE>\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n" 
                 "</CONTINUE>\n"
+
+                "\n<SUCCESS_END>\n"
+                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
+                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
+                "</SUCCESS_END>\n"
             )
         elif MemoryPrompt.current_step == "clean memory":
             out += (
-                "<SAVED_HYPOTHESIS>\n"
-                f"{str(MemoryPrompt.hypothesis[-1])}\n"
-                "<SAVED_HYPOTHESIS>\n"
                 "<SAVE>\n"
                 "Define informations usefull to resolve the PROBLEM and missing from KNOWN_INFO. "
                 "Use the save_missing_info SPECIAL_TOOL to save theses informations !\n"
-                "The function save_missing_info accept every string as argument. "
-                "Use new fact about the problem argument or what to do or not do next. "
-                "With description and precised file and line\n\n"
+                "The function save_missing_info accept every string as argument.\n"
+                "Possibles argument usage:\n"
+                "- New fact about the problem\n"
+                "- What to do or not do next\n"
+                "- Description\n"
+                "- Precised file and line\n\n"
+                "Warning all files will be reset, save only informations to solve the problem from sratch."
                 "If no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "</SAVE>\n"
+
+                "\n<SUCCESS_END>\n"
+                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
+                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
+                "</SUCCESS_END>\n"
             )
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
                 "<PROPOSE_HYPOTHESIS>\n"
-                "Check already exlored HYPOTHESES and new informations to propose a new one.\n"
+                "Check already exlored HYPOTHESES and new informations to propose a very new one.\n"
                 "For this use SPECIAL_TOOL: propose_hypothesis(cls, files: list[str], msg: str)\n"
                 "</PROPOSE_HYPOTHESIS>\n"
             )
         elif MemoryPrompt.current_step == "rule on":
             out += (
                 "<RULE_ON_HYPOTHESIS>\n"
-                "Check previous informations to respond to the following hypothesis:\n"
-                f"{MemoryPrompt.hypotesis[-1]['hyp']}"
+                "Check all new informations (informations not in KNOWN_INFO) to respond  to the following hypothesis:\n"
+                f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"'
                 "For this use SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
                 "</RULE_ON_HYPOTHESIS>\n"
+
+                "\n<SUCCESS_END>\n"
+                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
+                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the RULE_ON_HYPOTHESIS rule.\n" 
+                "</SUCCESS_END>\n"
             )
         else:
             raise ValueError("impossible current_step at prompt creation")
         out += (
             "\nUse multiple tools to speed up the process\n</INSTRUCTION>"
         )
-
-        anti_repetition_words = [
-            # Nouveauté
-            "new", "novel", "fresh", "original", "innovative", "inventive",
-            "unprecedented", "unseen", "untried", "unexplored", "uncharted",
-            "first-of-its-kind", "groundbreaking", "pioneering", "cutting-edge",
-            "state-of-the-art",
-            # Différence / unicité
-            "different", "distinct", "distinctive", "unique", "singular",
-            "one-of-a-kind", "unlike", "alternative", "divergent", "unconventional",
-            "unorthodox", "atypical", "non-obvious", "unexpected", "surprising",
-            "unfamiliar",
-            # Variété
-            "varied", "diverse", "versatile", "multifaceted", "assorted", "mixed",
-            "eclectic", "wide-ranging", "many-sided", "alternating", "rotating",
-            # Changement / progression
-            "changing", "evolving", "shifting", "progressive", "incremental",
-            "adaptive", "dynamic", "transformative", "pivotal", "decisive",
-            "game-changing",
-            # Créativité
-            "creative", "imaginative", "resourceful", "ingenious", "clever", "smart",
-            "lateral", "out-of-the-box", "experimental", "exploratory",
-            # Information / valeur ajoutée
-            "informative", "insightful", "revealing", "enlightening", "illuminating",
-            "meaningful", "substantive", "additive", "productive", "fruitful", "useful",
-        ]
-        magic1 = random.choice(anti_repetition_words)
-        while 1:
-            magic2 = random.choice(anti_repetition_words) 
-            if magic1 != magic2:
-                break
-        # out += f"Be {magic1} and {magic2} in your response !\n"
 
         return out
 
@@ -249,7 +224,7 @@ class SWEAgent(Agent):
         if self.executed:
             info = self.exec_result.strip()
             if not info.replace("''", "", 1).strip():
-                info = "[Code executed, but no print occured]"
+                info = "'[Code executed, but no print occured]'"
             out += (
                 f"<SANDBOX_OUTPUT>\n{info}\n"
                 "</SANDBOX_OUTPUT>\n\n"
@@ -284,13 +259,13 @@ class SWEAgent(Agent):
             sandbox.stop()
 
 
-def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
+def create_mbpp_agent(testbed: DockerTestbed, task: SWEBenchTaskInput,
                       output: str = "swebench_solution.json",
                       providers_file: str = "config/swe_providers.json",
                       provider_url: str = "", model_name: str = ""
                       ) -> SWEAgent:
 
-    client = McpClient(command=client_command)
+    client = McpClient(command=testbed.mcp_command())
     config = SandboxConfig()
     manual= build_manual(config, client.specs, client.resources, client.prompts)
 
@@ -310,7 +285,7 @@ def create_mbpp_agent(client_command: str, task: SWEBenchTaskInput,
         llmapi=llmapi,
         mcp_tools=client.tools,
         sandbox_config=SandboxConfig(),
-        demand="memorise"
+        testbed=testbed
     )
     MemoryPrompt.add_message(agent.get_instruction_prompt())
     return agent
@@ -343,7 +318,7 @@ def main(*,
         testbed.setup(eval_script=task.eval_script)
         print(f"[container] {testbed.container.id[:12]} started")
         agent = create_mbpp_agent(
-                            testbed.mcp_command(), task, output,
+                            testbed, task, output,
                             providers_file, provider_url, model_name)
         check = True
         while check:

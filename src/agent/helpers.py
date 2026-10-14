@@ -8,6 +8,9 @@ import json
 from dotenv import load_dotenv
 import re
 
+from src.agent.stepmetrics import StepMetrics
+from src.swebench.testbed import DockerTestbed
+
 
 def set_file_name(path: str, extension: str) -> str:
     """ choose the file name dependig of existing files """
@@ -197,7 +200,6 @@ class MemoryPromptSave(Exception):
 class MemoryPrompt:
 
     _new_data: dict[str, Any] = dict()
-    _msg_buffer: str = ""
 
     @classmethod
     def _get_new_prompt_data(cls) -> dict[str, Any]:
@@ -221,7 +223,6 @@ class MemoryPrompt:
             "next_step": cls.next_step,
             "step_memory": cls.step_memory,
             "current_step": cls.current_step,
-            "_msg_buffer": cls._msg_buffer
         }
         cls._new_data = data
 
@@ -260,11 +261,6 @@ class MemoryPrompt:
             cls.current_step = "get data"
             cls.hints: list[str] = []
             cls.hypothesis: list[dict[str, str]] = []
-
-    @classmethod
-    def apply_buffer(cls) -> None:
-        cls.add_message(cls._msg_buffer)
-        cls._msg_buffer = ""
 
     # Spceial Method usable by the llm
     @classmethod
@@ -323,14 +319,17 @@ class MemoryPrompt:
 
         for elem in cls.hypothesis:
             if elem["hyp"] == hyp:
-                print("this hypothesis has already been explored")
+                print(
+                    "this hypothesis has already been explored : "
+                    f"{elem['hyp']} | {elem['rule on']}"
+                )
                 if cls.current_step == "get data":
                     cls.simple_go_next_step()
                     cls.save_data()
                 return
 
         print("new hypothesis engaged")
-        cls.hypothesis.append({"hyp": hyp})
+        cls.hypothesis.append({"hyp": hyp, "rule on": "pending"})
         cls.current_step = "hypothesis"
         cls.simple_go_next_step()
         cls.save_data()
@@ -346,13 +345,16 @@ class MemoryPrompt:
 
         for elem in cls.hypothesis:
             if elem.get("rule on") == rule_on:
-                print("rule_on_hypothesis rejected: this ruling already exists")
+                print(
+                    "rule_on_hypothesis rejected: this ruling already exists : "
+                    f"{elem['hyp']} | {elem['rule on']}"
+                )
                 if cls.current_step == "test":
                     cls.simple_go_next_step()
                     cls.save_data()
                 return
 
-        print("rule_on_hypothesis validated")
+        print("rule_on_hypothesis saved")
         cls.hypothesis[-1]["rule on"] = rule_on
         cls.current_step = "rule on"
         cls.simple_go_next_step()
@@ -370,7 +372,7 @@ class MemoryPrompt:
                     return
 
     @classmethod
-    def apply_go_next_step(cls) -> None:
+    def apply_go_next_step(cls, testbed: DockerTestbed) -> None:
         cls.check_step_loop()
 
         if not cls.go_next:
@@ -381,24 +383,44 @@ class MemoryPrompt:
         if cls.current_step == "reset":
             cls.compress_memory()
             cls.current_step = cls.next_step[cls.current_step]
-        Log.print(f"step is now: {cls.current_step}")
-    
+            testbed.reset_data()
+   
     @classmethod
-    def compress_memory(cls) -> None:
+    def new_base_user_prompt(cls) -> str:
+        
+        msg = cls.base_user
+        
+        if not cls.hints and not cls.hypothesis:
+            return msg
 
-        cls.messages = cls.messages[:2]
-
-        msg = cls.base_user + "\n<KNOWN_INFO>\n"
+        msg += "\n<KNOWN_INFO>\n"
         for i, elem in enumerate(cls.hints, 1):
             msg += f"[{i}] {elem}\n"
         if cls.hypothesis:
             msg += "<HYPOTHESES>\n"
-            for elem in hypothesis:
+            for elem in cls.hypothesis:
                 msg += f"{elem['hyp']} | {elem['rule on']}"
             msg += "</HYPOTHESES>\n"
 
         msg += "</KNOWN_INFO\n>"
+        return msg
+
+    @classmethod
+    def compress_memory(cls) -> None:
+
+        cls.messages = cls.messages[:2]
+        msg = cls.new_base_user_prompt()
         cls.messages[1]["content"] = msg
+
+    @classmethod
+    def compress_user_msg(cls, steps: list[StepMetrics]) -> None:
+        if len(cls.messages) == 3:
+            cls.messages[-2]["content"] = cls.new_base_user_prompt()
+        else:
+            info = steps[-2].sandbox_output
+            if not info.replace("''", "", 1).strip():
+                info = "'[Code executed, but no print occured]'"
+            cls.messages[-2]["content"] = f"<OUTPUT>\n{info}\n</OUTPUT>"
 
     @classmethod
     def get_messages(cls) -> list[dict[str, str]]:
