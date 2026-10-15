@@ -111,7 +111,7 @@ print("bye")
             if MemoryPrompt.memory_mode:
                 Log.print(f"step is now: {MemoryPrompt.current_step}")
                 if MemoryPrompt.current_step in ["clean memory", "hypothesis", "rule on"]:
-                    resp = self.llmapi.response(MemoryPrompt.messages, 0.6)
+                    resp = self.llmapi.response(MemoryPrompt.messages, 0.1)
                 else:
                     resp = self.llmapi.response(MemoryPrompt.messages)
             else:
@@ -143,8 +143,11 @@ print("bye")
 
         self.set_step_data(new, resp, start)
         if MemoryPrompt.memory_mode:
+            if MemoryPrompt.current_step == "clean memory":
+                MemoryPrompt.save_missing_info(new.llm_output)
             MemoryPrompt.compress_user_msg(self.steps)
             MemoryPrompt.apply_go_next_step(self.testbed)
+
             if len(self.steps) == self.max_steps - 1:
                 MemoryPrompt.current_step = "final_answer"
             prompt = self.create_prompt()

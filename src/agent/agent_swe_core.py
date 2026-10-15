@@ -175,29 +175,32 @@ class SWEAgent(Agent):
             )
         elif MemoryPrompt.current_step == "clean memory":
             out += (
-                '<PRIMAL_DIRECTIVE priority="ABSOLUTE">\n'
-                "If all TESTS pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
-                "If TESTS are unsuccessful or FAIL and the main problem is unresolved follow the CONTINUE rule.\n" 
-                "</PRIMAL_DIRECTIVE>\n"
-
                 "<SAVE>\n"
-                "WARNING: after this step the repository is RESET to its original state. "
-                "ALL the modifications you made are DELETED and will not exist anymore. "
-                "Only the information saved with save_missing_info is kept for the next attempt.\n"
-                "Define informations usefull to resolve the PROBLEM and missing from KNOWN_INFO. "
-                "Use the save_missing_info SPECIAL_TOOL to save theses informations !\n"
-                "The function save_missing_info accept every string as argument.\n"
-                "Possibles argument usage:\n"
-                "- New fact about the problem\n"
-                "- What to do or not do next\n"
-                "- Description\n"
-                "- Precised file and line\n\n"
-                "Save only informations to solve the problem from scratch, "
-                "do not count on your current modifications being there.\n"
+                "You are writing a memo for your NEXT attempt.\n"
+                "The repository will be RESET to its original state. Your current edits are gone.\n"
+                "The next attempt only knows what you write here. Nothing else.\n"
+                "\nRules:\n"
+                "- Maximum 25 lines. Be concise.\n"
+                "- NO tool call logs. NO raw tracebacks. NO copied test output.\n"
+                "- Only facts that change the next attempt's decisions.\n"
+                "- Use the exact structure below, with all 5 sections.\n"
+                "\n1) BUG LOCATION\n"
+                "   file:line where the failure originates\n"
+                "   the exact expression/statement that fails at runtime\n"
+                "\n2) ROOT CAUSE\n"
+                "   one sentence describing the runtime sequence that leads to the error\n"
+                "   (do not restate the exception message)\n"
+                "\n3) FIX TO TRY\n"
+                "   the concrete modification, as a small code snippet (<= 6 lines)\n"
+                "   name the file and the function to modify\n"
+                "\n4) DO NOT RETRY (failed approaches)\n"
+                "   bullet list, one line per approach, format:\n"
+                "     - <approach>  ->  <resulting error>\n"
+                "   (only include approaches that actually made the tests fail)\n"
+                "\n5) CLUES IN THE REPO\n"
+                "   comments, docstrings, or existing code lines that point at the intended fix\n"
+                "   include file:line references\n"
                 "</SAVE>\n"
-
-                "\nIf no new information, use the go_next_step SPECIAL_TOOL.\n"
-                "\nRun every tool calls needed in parallel.\n"
             )
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
@@ -230,11 +233,9 @@ class SWEAgent(Agent):
         if MemoryPrompt.current_step != "clean memory":
             out += (
                 "\nUse one only tool and wait for its result.\n"
+                "Be very attentive of MAIN_OBJECTIVE and KNOWN_INFO .\n"
+                "</INSTRUCTION>"
             )
-        out += (
-            "Be very attentive of MAIN_OBJECTIVE and KNOWN_INFO .\n"
-            "</INSTRUCTION>"
-        )
 
         return out
 

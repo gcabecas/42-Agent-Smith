@@ -257,7 +257,8 @@ class MemoryPrompt:
                             "modifie": "test", "test": "rule on",
                             "rule on": "clean memory",
                             "clean memory": "reset",
-                            "reset": "investigate"
+                            "reset": "investigate",
+                            "final_answer": "final_answer"
             }
             cls.current_step = "investigate"
             cls.previous_step = "investigate"
