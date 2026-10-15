@@ -75,6 +75,7 @@ class SWEBasePrompts:
             "The sandbox is just a small lab not a part of the bugged environment and not a part of problem to resolve.\n"
             "So all the code you give, need to be in python code block:\n```python\n<CODE>\n```\n"
             "One code block = one Python snippet.\n"
+            "Do not be baited by tests files and folders. They never be a part of the problem."
 
         )
         system_prompt += (
@@ -98,10 +99,10 @@ class SWEBasePrompts:
             f"<PROBLEM>\n{problem_statement}</PROBLEM>\n"
             "It is entirely up to you to resolve the problem inside the git repository environment accessed with mcp-tools,"
             " including applie modifications (with available python tools).\n"
-            "</MAIN_OBJECTIVE>\n"
         )
         if hints_text:
             user_prompt += f"<MAIN_OBJECTIVE_HINT>\n{hints_text}\n</MAIN_OBJECTIVE_HINT>\n"
+        user_prompt += "</MAIN_OBJECTIVE>\n"
 
         return (system_prompt, user_prompt)
 
@@ -136,6 +137,7 @@ class SWEAgent(Agent):
                 "Figure out where is located the bug exactly. Changements will be made only later.\n"
                 "Use tools can give you interestings new hints.\n"
                 "Optimise your tool usage and try find very usefull informations.\n"
+                "If reading, read a whole function per call (30 to 80 lines).\n"
                 "\n"
                 "If enough informations are present, use the propose_hypothesis SPECIAL_TOOL.\n"
                 "Do not use the final_answer tool.\n"
@@ -196,7 +198,6 @@ class SWEAgent(Agent):
 
                 "\nIf no new information, use the go_next_step SPECIAL_TOOL.\n"
                 "\nRun every tool calls needed in parallel.\n"
-                "</INSTRUCTION>"
             )
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
@@ -218,13 +219,22 @@ class SWEAgent(Agent):
                 "If tests are unsuccessful or FAIL and the main problem is unresolved follow the RULE_ON_HYPOTHESIS rule.\n" 
                 "</SUCCESS_END>\n"
             )
+        elif MemoryPrompt.current_step == "final_answer":
+            out += (
+                "\n<END>\n"
+                "This is the end of the program; regardless of what occurred during the previous steps, now proceed with final_answer SPECIAL_TOOL.\n"
+                "</END>\n"
+            )
         else:
             raise ValueError("impossible current_step at prompt creation")
         if MemoryPrompt.current_step != "clean memory":
             out += (
                 "\nUse one only tool and wait for its result.\n"
-                "</INSTRUCTION>"
             )
+        out += (
+            "Be very attentive of MAIN_OBJECTIVE and KNOWN_INFO .\n"
+            "</INSTRUCTION>"
+        )
 
         return out
 

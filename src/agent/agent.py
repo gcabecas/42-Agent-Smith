@@ -145,6 +145,8 @@ print("bye")
         if MemoryPrompt.memory_mode:
             MemoryPrompt.compress_user_msg(self.steps)
             MemoryPrompt.apply_go_next_step(self.testbed)
+            if len(self.steps) == self.max_steps - 1:
+                MemoryPrompt.current_step = "final_answer"
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
         else:
