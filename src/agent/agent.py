@@ -110,10 +110,10 @@ print("bye")
         else:
             if MemoryPrompt.memory_mode:
                 Log.print(f"step is now: {MemoryPrompt.current_step}")
-                if MemoryPrompt.current_step in ["clean memory", "hypothesis", "rule on"]:
+                if MemoryPrompt.current_step in ["clean memory", "hypothesis", "rule_on"]:
                     resp = self.llmapi.response(MemoryPrompt.messages, 0.1)
                 else:
-                    resp = self.llmapi.response(MemoryPrompt.messages)
+                    resp = self.llmapi.response(MemoryPrompt.messages, 0.1)
             else:
                 resp = self.llmapi.response(MemoryPrompt.messages)
 
@@ -126,6 +126,8 @@ print("bye")
                 if self.imports:
                     code = f"{self.imports}\n{code}"
                 read, final = self.sandbox_term(code)
+                if len(read) > 4000:
+                    read = read[:4000] + "....\n<ERROR>Too many characters; the rest of the message has been deleted.</ERROR>"
                 self.executed = True
                 if len(codes) > 1:
                     new.sandbox_input += f"[codeblock: {i}]\n{code}\n"
@@ -147,9 +149,6 @@ print("bye")
                 MemoryPrompt.save_missing_info(new.llm_output)
             MemoryPrompt.compress_user_msg(self.steps)
             MemoryPrompt.apply_go_next_step(self.testbed)
-
-            if len(self.steps) == self.max_steps - 1:
-                MemoryPrompt.current_step = "final_answer"
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
         else:

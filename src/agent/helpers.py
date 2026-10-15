@@ -7,6 +7,7 @@ import sys
 import json
 from dotenv import load_dotenv
 import re
+import random
 
 from src.agent.stepmetrics import StepMetrics
 from src.swebench.testbed import DockerTestbed
@@ -223,7 +224,8 @@ class MemoryPrompt:
             "next_step": cls.next_step,
             "step_memory": cls.step_memory,
             "current_step": cls.current_step,
-            "previous_step": cls.previous_step
+            "previous_step": cls.previous_step,
+            "loop_retry": cls.loop_retry
         }
         cls._new_data = data
 
@@ -232,7 +234,7 @@ class MemoryPrompt:
         out = (
             f"<DIRECTIVE>\n'{info}' has already been executed. You are certainly engaging an infinite llm loop.\n"
             "Be attentive of KNOWN_INFO, and make a new assumtion to verify at next execution\n"
-            "exemple 1: ```pyhton\nadd_current_objective_hint('we have now enough informations and need to resolve the problem')\n```\n"
+            "exemple 1: ```pyhton\nadd_current_objective_hint('we have now enough information and need to resolve the problem')\n```\n"
             "exemple 2: ```pyhton\nadd_current_objective_hint('i think the file x have already been modified,"
             " we need to git restore and edit it with a proper complete python code block')\n```\n"
             "\n</DIRECTIVE>"
@@ -254,16 +256,16 @@ class MemoryPrompt:
             cls.step_memory = []
             cls.next_step = {
                             "investigate": "hypothesis", "hypothesis": "modifie",
-                            "modifie": "test", "test": "rule on",
-                            "rule on": "clean memory",
+                            "modifie": "test", "test": "rule_on",
+                            "rule_on": "clean memory",
                             "clean memory": "reset",
                             "reset": "investigate",
-                            "final_answer": "final_answer"
             }
             cls.current_step = "investigate"
             cls.previous_step = "investigate"
             cls.hints: list[str] = []
             cls.hypothesis: list[dict[str, str]] = []
+            cls.loop_retry = 0
 
     # Spceial Method usable by the llm
     @classmethod
@@ -274,7 +276,6 @@ class MemoryPrompt:
         if msg in cls.hints:
             print("hint already knowed")
             return
-            # TODO IMPLEMENT ERROR CHECKING
 
         cls.hints.append(msg)
         print("hint saved")
@@ -292,6 +293,7 @@ class MemoryPrompt:
         print(f"step set to {cls.next_step[cls.current_step]}")
         cls.go_next = True
         cls.step_memory = []
+        cls.loop_retry = 0
         cls.save_data()
 
     @classmethod
@@ -302,10 +304,64 @@ class MemoryPrompt:
         print(f"step set to {cls.next_step[cls.current_step]}")
         cls.go_next = True
         cls.step_memory = []
+        cls.loop_retry = 0
 
     class CheckHypArgs(BaseModel):
         files: list[str]
         msg: str
+
+    @classmethod
+    def loop_reaction_msg(cls, failer: str) -> str:
+        known_info = cls.new_base_user_prompt(False)
+        if cls.loop_retry == 1:
+            out = (
+                f"[{failer.upper()} REJECTED - DUPLICATE]\n"
+                f"You repeated !"
+                f"Already explored, check KNOWN_INFO !\n"
+                "Your next proposal must differ in file, function, or root cause.\n"
+                f"Call {failer} now."
+            )
+        else:
+            out = (
+                f"[{failer.upper()} REJECTED - DUPLICATE #[{cls.loop_retry}]\n"
+                f"FORBIDDEN TO COPY AND USE DATA OF KNOWN_INFO !\n"
+                f"Find unexplored candidates. Then call propose_hypothesis with one of theses !\n"
+                f"Call {failer} with arguments differ from KNOWN_DATA hypotheses."
+            )
+        if cls.loop_retry <= 2:
+            return out
+
+        anti_repetition_words = [
+            "new", "novel", "fresh", "original", "innovative", "inventive",
+            "unprecedented", "unseen", "untried", "unexplored", "uncharted",
+            "first-of-its-kind", "groundbreaking", "pioneering", "cutting-edge",
+            "state-of-the-art",
+
+            "different", "distinct", "distinctive", "unique", "singular",
+            "one-of-a-kind", "unlike", "alternative", "divergent", "unconventional",
+            "unorthodox", "atypical", "non-obvious", "unexpected", "surprising",
+            "unfamiliar",
+
+            "varied", "diverse", "versatile", "multifaceted", "assorted", "mixed",
+            "eclectic", "wide-ranging", "many-sided", "alternating", "rotating",
+
+            "changing", "evolving", "shifting", "progressive", "incremental",
+            "adaptive", "dynamic", "transformative", "pivotal", "decisive",
+            "game-changing",
+
+            "creative", "imaginative", "resourceful", "ingenious", "clever", "smart",
+            "lateral", "out-of-the-box", "experimental", "exploratory",
+
+            "informative", "insightful", "revealing", "enlightening", "illuminating",
+            "meaningful", "substantive", "additive", "productive", "fruitful", "useful",
+        ]
+        magic1 = random.choice(anti_repetition_words)
+        while 1:
+            magic2 = random.choice(anti_repetition_words) 
+            if magic1 != magic2:
+                break
+        out += f"\nBe {magic1} and {magic2} in your response."
+        return out
 
     # Spceial Method usable by the llm
     @classmethod
@@ -322,16 +378,17 @@ class MemoryPrompt:
 
         for elem in cls.hypothesis:
             if elem["hyp"] == hyp:
+                cls.loop_retry += 1
                 print(
-                    "this hypothesis has already been explored, find something newer not in KNOWN_INFO !"
+                    cls.loop_reaction_msg("propose_hypothesis")
                 )
                 if cls.current_step == "investigate":
                     cls.simple_go_next_step()
-                    cls.save_data()
+                cls.save_data()
                 return
 
         print("new hypothesis engaged")
-        cls.hypothesis.append({"hyp": hyp, "rule on": "pending"})
+        cls.hypothesis.append({"hyp": hyp, "rule_on": "pending"})
         cls.current_step = "hypothesis"
         cls.simple_go_next_step()
         cls.save_data()
@@ -339,25 +396,26 @@ class MemoryPrompt:
     # Spceial Method usable by the llm
     @classmethod
     def rule_on_hypothesis(cls, verdict: str, evidence: str) -> None:
-        if cls.current_step not in ["test", "rule on"]:
+        if cls.current_step not in ["test", "rule_on"]:
             print("You need to be asked to use this function")
             return
 
         rule_on = f"verdict: {verdict} | evidence: {evidence}"
 
         for elem in cls.hypothesis:
-            if elem.get("rule on") == rule_on:
+            if elem.get("rule_on") == rule_on:
+                cls.loop_retry += 1
                 print(
-                    "rule_on_hypothesis rejected, this ruling already exists, find something newer not in KNOWN_INFO !"
+                    cls.loop_reaction_msg("rule_on_hypothesis")
                 )
                 if cls.current_step == "test":
                     cls.simple_go_next_step()
-                    cls.save_data()
+                cls.save_data()
                 return
 
         print("rule_on_hypothesis saved")
-        cls.hypothesis[-1]["rule on"] = rule_on
-        cls.current_step = "rule on"
+        cls.hypothesis[-1]["rule_on"] = rule_on
+        cls.current_step = "rule_on"
         cls.simple_go_next_step()
         cls.save_data()
 
@@ -366,12 +424,14 @@ class MemoryPrompt:
         if len(cls.step_memory) < 2:
             return
         
-        if cls.current_step not in ["hypothesis", "rule on"]:
-            for i, elem in enumerate(cls.step_memory[:-1], 1):
-                for memory in cls.step_memory[i:]:
-                    if elem == memory:
+        for i, elem in enumerate(cls.step_memory[:-1], 1):
+            for memory in cls.step_memory[i:]:
+                if elem == memory:
+                    cls.messages.pop(-1)
+                    if cls.current_step not in ["hypothesis", "rule_on"]:
                         cls.simple_go_next_step()
-                        return
+                    Log.print("duplicate deleted")
+                    return
 
     @classmethod
     def apply_go_next_step(cls, testbed: DockerTestbed) -> None:
@@ -388,9 +448,12 @@ class MemoryPrompt:
             testbed.reset_data()
    
     @classmethod
-    def new_base_user_prompt(cls) -> str:
+    def new_base_user_prompt(cls, with_base: bool = True) -> str:
         
-        msg = cls.base_user
+        if with_base:
+            msg = cls.base_user
+        else:
+            msg = ""
         
         if not cls.hints and not cls.hypothesis:
             return msg
@@ -401,7 +464,7 @@ class MemoryPrompt:
         if cls.hypothesis:
             msg += "<HYPOTHESES>\n"
             for elem in cls.hypothesis:
-                msg += f"{elem['hyp']} | {elem['rule on']}"
+                msg += f"{elem['hyp']} | {elem['rule_on']}"
             msg += "</HYPOTHESES>\n"
 
         msg += "</KNOWN_INFO\n>"

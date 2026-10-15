@@ -60,22 +60,20 @@ class SWEBasePrompts:
                                 hints_text: list[str], manual: str) -> tuple[str, str]:
 
         system_prompt = (
-            "You have to use only text, every tools are executed in text python code blocks.\n"
-
             "You are a software engineering coding agent "
             "specialised to resolve SWE bench problems.\n"
-            "You need to resolve a problem inside a git repository containing bugged files.\n"
+            "You need to resolve a problem inside a git repository containing bugged files.\n\n"
 
+            "You have to use only text, every tools are executed in text python code blocks.\n"
             "You are in a isolated git repository environment, you have only access to a python sandbox and tools usable inside it to acquire data and take action.\n"
             "Sandbox tools usage is very important, they are python functions usable inside the sandbox, they give you access to the environment you have to debug.\n"
-            "Do not write comments or explanations, only code blocks.\n"
             "It is entirely up to you to resolve the problem. You have to modifie directly files.\n"
             "You are in a fully automated pipeline, all the pyhton code you give is used in the sandbox and the output is returned to you,"
-            " if the code not work, think of trying differents possibilities.\n"
+            " if the code not work in the sandbox, think of trying differents possibilities.\n"
             "The sandbox is just a small lab not a part of the bugged environment and not a part of problem to resolve.\n"
-            "So all the code you give, need to be in python code block:\n```python\n<CODE>\n```\n"
+            "All the code you give, need to be in python code block:\n```python\n<CODE>\n```\n"
             "One code block = one Python snippet.\n"
-            "Do not be baited by tests files and folders. They never be a part of the problem."
+            "Do not be baited by tests files and folders. They are never part of the problem.\n\n"
 
         )
         system_prompt += (
@@ -88,8 +86,8 @@ class SWEBasePrompts:
                 "rule_on_hypothesis(verdict: str, evidence: str)\n"
                 "final_answer(git_diff: str)\n"
                 "exemple of use:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
-                "Here git_diff is the string or print given by the command git diff, use another tool to get it !\n"
-                "follow the instruction to use it correctly\n"
+                "Here git_diff is the string or print given by the command git diff, use another tool to get it.\n"
+                "Follow the instructions to use them correctly\n"
                 "</SPECIAL_TOOL>\n"
                 "</SANDBOX_RULES_AND_TOOLS>"
         )
@@ -125,34 +123,33 @@ class SWEAgent(Agent):
     def get_instruction_prompt(self) -> str:
 
         out = (
-            "<INSTRUCTION>\n\n"
+            "<INSTRUCTIONS>\n\n"
         )
         if MemoryPrompt.current_step == "investigate":
             out += (
                 "<INVESTIGATE>\n"
                 "Execute SANDBOX_TOOLS to investigate.\n"
-                "Based on all the current information obtained.\n"
-                "You don't have to modifie now, focus on the investigation. "
-                "Use only tools to get informations !\n"
+                "Based on information of : INVESTIGATE, KNOWN_DATA and MAIN_OBJECTIVE."
+                "Use only tools to get information !\n"
                 "Figure out where is located the bug exactly. Changements will be made only later.\n"
-                "Use tools can give you interestings new hints.\n"
-                "Optimise your tool usage and try find very usefull informations.\n"
-                "If reading, read a whole function per call (30 to 80 lines).\n"
+                "Optimise your tool usage; exemple: if reading, read a whole block no few lines.\n"
                 "\n"
-                "If enough informations are present, use the propose_hypothesis SPECIAL_TOOL.\n"
+                "You don't have to modifie now, focus on the investigation.\n"
+                "If the information provided indicates which file/s is/are causing the problem, use the propose_hypothesis SPECIAL_TOOL.\n"
                 "Do not use the final_answer tool.\n"
                 "</INVESTIGATE>\n"
             )
         elif MemoryPrompt.current_step == "modifie":
             out += (
-                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
                 "<MODIFIE>\n"
+                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Execute SANDBOX_TOOLS to modifie/add.\n"
-                "Based on informations getted through INVESTIGATE and KNOWN_DATA. "
-                "Resolve the problem directly.\n"
+                "Based on information of : HYPOTHESIS, INVESTIGATE, KNOWN_DATA and MAIN_OBJECTIVE."
+                "Resolve the problem.\n"
                 "Modifie files and eventual folder with available tools.\n"
                 "\n"
-                "If all the necessary was modified, use the go_next_step SPECIAL_TOOL.\n"
+                "Focus on the modifications or go next.\n"
+                "If all the necessary was modified/added, use the go_next_step SPECIAL_TOOL.\n"
                 "Do not use the final_answer tool.\n"
                 "</MODIFIE>\n"
             )
@@ -162,14 +159,11 @@ class SWEAgent(Agent):
                 "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
                 "</PRIMAL_DIRECTIVE>\n"
 
-                f"\nHYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n\n"
                 "<TEST>\n"
+                f"\nHYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Execute SANDBOX_TOOLS to test !\n"
                 "Use tools for checking the results of previous modifications.\n"
-                "Valid or invalid changes made.\n"
-                "</TEST>\n"
-
-                "\n<CONTINUE>\n"
+                "Valid or invalid changes made.\n\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n"
                 "</CONTINUE>\n"
             )
@@ -201,20 +195,23 @@ class SWEAgent(Agent):
                 "   comments, docstrings, or existing code lines that point at the intended fix\n"
                 "   include file:line references\n"
                 "</SAVE>\n"
+                "</INSTRUCTIONS>"
             )
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
                 "<PROPOSE_HYPOTHESIS>\n"
-                "Check already exlored HYPOTHESES and new informations to propose a very new one.\n"
+                "Check already exlored HYPOTHESES and new information to propose a very new one.\n"
                 "For this use SPECIAL_TOOL: propose_hypothesis(cls, files: list[str], msg: str)\n"
                 "</PROPOSE_HYPOTHESIS>\n"
             )
-        elif MemoryPrompt.current_step == "rule on":
+        elif MemoryPrompt.current_step == "rule_on":
             out += (
                 "<RULE_ON_HYPOTHESIS>\n"
-                "Review all available information, including new evidence outside KNOWN_INFO, to reassess the following hypothesis and provide a well-supported verdict: "
+                "Based on information of : HYPOTHESIS, TEST, INVESTIGATE."
+                "Reassess the following hypothesis and provide a well-supported verdict:\n"
                 f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"\n'
                 "For this use SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
+                "The agument 'evidence' must be different from previous HYPOTHESES evidences.\n"
                 "</RULE_ON_HYPOTHESIS>\n"
 
                 "\n<SUCCESS_END>\n"
@@ -222,19 +219,16 @@ class SWEAgent(Agent):
                 "If tests are unsuccessful or FAIL and the main problem is unresolved follow the RULE_ON_HYPOTHESIS rule.\n" 
                 "</SUCCESS_END>\n"
             )
-        elif MemoryPrompt.current_step == "final_answer":
-            out += (
-                "\n<END>\n"
-                "This is the end of the program; regardless of what occurred during the previous steps, now proceed with final_answer SPECIAL_TOOL.\n"
-                "</END>\n"
-            )
         else:
             raise ValueError("impossible current_step at prompt creation")
         if MemoryPrompt.current_step != "clean memory":
             out += (
                 "\nUse one only tool and wait for its result.\n"
-                "Be very attentive of MAIN_OBJECTIVE and KNOWN_INFO .\n"
-                "</INSTRUCTION>"
+                "<OUTPUT_FORMAT>\n"
+                "PLAN: <a single line of affirmative thought>\n"
+                "```python\n<code>\n```\n"
+                "</OUTPUT_FORMAT>\n"
+                "</INSTRUCTIONS>"
             )
 
         return out
