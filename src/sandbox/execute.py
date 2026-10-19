@@ -15,7 +15,7 @@ from src.sandbox.security.builtins import SAFE_BUILTINS
 from src.sandbox.security.filesystem import restricted_open
 from src.sandbox.security.imports import restricted_import
 from src.sandbox.security.network import block_network
-from src.agent.helpers import MemoryPrompt
+from src.agent.memoryprompt import MemoryPrompt
 
 MAX_OUTPUT_CHARS = 10_000
 

@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 from src.common.models import SandboxConfig, SWEBenchTaskInput
 from src.sandbox.execute import Sandbox
 from src.agent.agent import Agent
-from src.agent.helpers import LlmApi, MemoryPrompt, Log
+from src.agent.helpers import LlmApi, Log
+from src.agent.memoryprompt import MemoryPrompt
 from src.swebench.server_docker import server_docker
 from src.sandbox.mcp_client import McpClient
 from src.sandbox.manual import build_manual
@@ -119,6 +120,7 @@ class SWEAgent(Agent):
     sandbox_config: SandboxConfig
     mcp_tools: dict[str, Any]
     testbed: DockerTestbed
+    previous_sandbox_output: str = ""
 
     def get_instruction_prompt(self) -> str:
 
@@ -128,14 +130,13 @@ class SWEAgent(Agent):
         if MemoryPrompt.current_step == "investigate":
             out += (
                 "<INVESTIGATE>\n"
+                "Based on information of : PROBLEM, KNOWN_INFO and INVESTIGATE_OUTPUT.\n"
                 "Execute SANDBOX_TOOLS to investigate.\n"
-                "Based on information of : INVESTIGATE, KNOWN_DATA and MAIN_OBJECTIVE."
-                "Use only tools to get information !\n"
                 "Figure out where is located the bug exactly. Changements will be made only later.\n"
+                "Use only tools to get information.\n"
                 "Optimise your tool usage; exemple: if reading, read a whole block no few lines.\n"
-                "\n"
                 "You don't have to modifie now, focus on the investigation.\n"
-                "If the information provided indicates which file/s is/are causing the problem, use the propose_hypothesis SPECIAL_TOOL.\n"
+                "If the information provided indicates the cause of the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n\n"
                 "Do not use the final_answer tool.\n"
                 "</INVESTIGATE>\n"
             )
@@ -143,13 +144,11 @@ class SWEAgent(Agent):
             out += (
                 "<MODIFIE>\n"
                 f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
+                "Based on information of : HYPOTHESIS, INVESTIGATE_OUTPUT and KNOWN_INFO.\n"
                 "Execute SANDBOX_TOOLS to modifie/add.\n"
-                "Based on information of : HYPOTHESIS, INVESTIGATE, KNOWN_DATA and MAIN_OBJECTIVE."
-                "Resolve the problem.\n"
+                "Resolve the PROBLEM.\n"
                 "Modifie files and eventual folder with available tools.\n"
-                "\n"
-                "Focus on the modifications or go next.\n"
-                "If all the necessary was modified/added, use the go_next_step SPECIAL_TOOL.\n"
+                "Focus on the modifications only; or if all the necessary was modified/added, use the go_next_step SPECIAL_TOOL.\n\n"
                 "Do not use the final_answer tool.\n"
                 "</MODIFIE>\n"
             )
@@ -162,7 +161,8 @@ class SWEAgent(Agent):
                 "<TEST>\n"
                 f"\nHYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Execute SANDBOX_TOOLS to test !\n"
-                "Use tools for checking the results of previous modifications.\n"
+                "Based on information of : MODIFIE_OUTPUT and PROBLEM.\n"
+                "Use tools to test the results of previous modifications.\n"
                 "Valid or invalid changes made.\n\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n"
                 "</CONTINUE>\n"
@@ -170,9 +170,11 @@ class SWEAgent(Agent):
         elif MemoryPrompt.current_step == "clean memory":
             out += (
                 "<SAVE>\n"
-                "You are writing a memo for your NEXT attempt.\n"
-                "The repository will be RESET to its original state. Your current edits are gone.\n"
-                "The next attempt only knows what you write here. Nothing else.\n"
+                f"\nHypothesis explored: {MemoryPrompt.hypothesis[-1]['hyp']} | {MemoryPrompt.hypothesis[-1]['rule_on']}\n\n"
+                "Based on information of : INVESTIGATE_OUTPUT, MODIFIE_OUTPUT, TEST_OUTPUT and PROBLEM.\n"
+                "You are writing a memo for your next attempt.\n"
+                "The repository will be reset to its original state. Your current edits are gone.\n"
+                "The next attempt only knows KNOWN_INFO and what you write here. Nothing else.\n"
                 "\nRules:\n"
                 "- Maximum 25 lines. Be concise.\n"
                 "- NO tool call logs. NO raw tracebacks. NO copied test output.\n"
@@ -200,17 +202,18 @@ class SWEAgent(Agent):
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
                 "<PROPOSE_HYPOTHESIS>\n"
-                "Check already exlored HYPOTHESES and new information to propose a very new one.\n"
-                "For this use SPECIAL_TOOL: propose_hypothesis(cls, files: list[str], msg: str)\n"
+                "Based on information of : KNOWN_INFO and INVESTIGATE.\n"
+                "Propose a new hypothesis to resolve the PROBLEM.\n"
+                "For this; Execute SPECIAL_TOOL: propose_hypothesis(cls, files: list[str], msg: str)\n"
                 "</PROPOSE_HYPOTHESIS>\n"
             )
         elif MemoryPrompt.current_step == "rule_on":
             out += (
                 "<RULE_ON_HYPOTHESIS>\n"
-                "Based on information of : HYPOTHESIS, TEST, INVESTIGATE."
-                "Reassess the following hypothesis and provide a well-supported verdict:\n"
+                "Based on information of : TEST, MODIFIE, INVESTIGATE."
+                "Reassess the following hypothesis and provide a well-supported verdict: "
                 f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"\n'
-                "For this use SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
+                "For this; Execute SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
                 "The agument 'evidence' must be different from previous HYPOTHESES evidences.\n"
                 "</RULE_ON_HYPOTHESIS>\n"
 
@@ -225,10 +228,11 @@ class SWEAgent(Agent):
             out += (
                 "\nUse one only tool and wait for its result.\n"
                 "<OUTPUT_FORMAT>\n"
-                "PLAN: <a single line of affirmative thought>\n"
+                "<a single line of affirmative thought>\n"
                 "```python\n<code>\n```\n"
                 "</OUTPUT_FORMAT>\n"
-                "</INSTRUCTIONS>"
+                "</INSTRUCTIONS>\n"
+                "Follow instructions."
             )
 
         return out

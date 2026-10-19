@@ -47,6 +47,8 @@ class SWETools(McpToolsCore):
                     if end_line >= i >= start_line:
                         read += f"{str(i)}: {line}"
                     line = file.readline()
+                if end_line != float("inf") and end_line > i:
+                    read += f"WARNING: file have {i} lines, arg end_line is {end_line}"
 
         except Exception as e:
             self.message_complete(f"error encounter: {e}", tid, error=True)

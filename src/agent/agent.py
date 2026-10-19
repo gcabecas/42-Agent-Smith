@@ -5,7 +5,8 @@ from typing import Optional
 from datetime import datetime
 
 from src.agent.stepmetrics import StepMetrics
-from src.agent.helpers import Log, LlmApi, MemoryPrompt
+from src.agent.memoryprompt import MemoryPrompt
+from src.agent.helpers import Log, LlmApi
 
 
 NDEBUG = 0  # TODO debug variable
@@ -126,8 +127,15 @@ print("bye")
                 if self.imports:
                     code = f"{self.imports}\n{code}"
                 read, final = self.sandbox_term(code)
-                if len(read) > 4000:
-                    read = read[:4000] + "....\n<ERROR>Too many characters; the rest of the message has been deleted.</ERROR>"
+                if len(read) > 5000:
+                    if not "test" in resp["llm_output"]:
+                        err_msg = (
+                            "\n<WARNING>\n"
+                            "SANDBOX_OUTPUT truncated at 5000 characters.\n"
+                            "Retrieve the remainder using available tools if possible and truly necessary.\n"
+                            "</WARNING>"
+                        )
+                        read = read[:5000] + err_msg
                 self.executed = True
                 if len(codes) > 1:
                     new.sandbox_input += f"[codeblock: {i}]\n{code}\n"
@@ -146,8 +154,26 @@ print("bye")
         self.set_step_data(new, resp, start)
         if MemoryPrompt.memory_mode:
             if MemoryPrompt.current_step == "clean memory":
-                MemoryPrompt.save_missing_info(new.llm_output)
-            MemoryPrompt.compress_user_msg(self.steps)
+                MemoryPrompt.simple_save_missing_info(new.llm_output)
+
+            loop = MemoryPrompt.check_step_loop()
+            if loop:
+                self.executed = False
+            else:
+                MemoryPrompt.compress_user_msg(self.previous_sandbox_output)
+                self.previous_sandbox_output = new.sandbox_output
+
+            if MemoryPrompt.current_step == "investigate":
+                if len(self.steps) <= 15:
+                    if len(MemoryPrompt.step_memory) >= 10:
+                        MemoryPrompt.simple_go_next_step()
+                elif len(self.steps) <= 23:
+                    if len(MemoryPrompt.step_memory) >= 9:
+                        MemoryPrompt.simple_go_next_step()
+                else:
+                    if len(MemoryPrompt.step_memory) >= 3:
+                        MemoryPrompt.simple_go_next_step()
+
             MemoryPrompt.apply_go_next_step(self.testbed)
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
