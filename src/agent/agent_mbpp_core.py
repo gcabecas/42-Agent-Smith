@@ -101,7 +101,7 @@ class MBPPAgent(Agent):
                 msg_attempts = "LAST_ATTEMPT"
             out += (
                 # "<PRIMAL_DIRECTIVE>\n"
-                "Only if the LAST_ATTEMPT is without ERROR, use final_answer tool with the LAST_ATTEMPT solution code as argument.\n"
+                "Only if ALL ASSERTS PASSED in the LAST_ATTEMPT, use final_answer tool with the LAST_ATTEMPT solution code as argument.\n\n"
                 # "</PRIMAL_DIRECTIVE>\n"
                 f"Otherwise, use the information in {msg_attempts} to accomplish the following tasks:\n"
                 "\t1: create the function of the MAIN_OBJECTIVE.\n"
@@ -109,8 +109,9 @@ class MBPPAgent(Agent):
                 "\tRules:\n"
                 "\t\tuse one single snippet.\n"
                 "\t\tfollow the SANDBOX_RULES restrictions.\n"
-                "\t\tif the sandbox encounters an error due to restrictions violation, use a different way to create the function.\n"
-                "\t\tif the assertions fail, try a new solution to resolve the MAIN_PROBLEM.\n"
+                "\t\tif the sandbox encounters an ERROR due to restrictions violation, use a different way to create the function.\n"
+                "\t\tif the assertions fail (ERROR), try a new solution to resolve the MAIN_PROBLEM.\n"
+                "\t\tdo not use final_answer"
             )
         else:
             out += (
@@ -139,6 +140,9 @@ class MBPPAgent(Agent):
         sandbox = Sandbox(self.sandbox_config)
         try:
             status, value, output = sandbox.run(code + "\n")
+            outputs = ""
+            for i, elem in enumerate(outputs.split("\n"), 1):
+                outputs += f"{i}: {elem}\n"
             outputs = code
             if output:
                 outputs += f"\n[STDOUT]:\n{output}"
