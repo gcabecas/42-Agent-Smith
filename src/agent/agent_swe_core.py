@@ -6,11 +6,11 @@ from pydantic import BaseModel, Field
 
 from src.common.models import SandboxConfig, SWEBenchTaskInput
 from src.sandbox.execute import Sandbox
+from src.sandbox.mcp_client import McpClient
 from src.agent.agent import Agent
 from src.agent.helpers import LlmApi, Log
 from src.agent.memoryprompt import MemoryPrompt
 from src.swebench.server_docker import server_docker
-from src.sandbox.mcp_client import McpClient
 from src.sandbox.manual import build_manual
 from src.sandbox.cli import read_entry_from_python
 from src.swebench.testbed import DockerTestbed
@@ -117,8 +117,6 @@ class SWEAgent(Agent):
     max_steps: int = 30
     timeout: float = 900  # TODO
 
-    sandbox_config: SandboxConfig
-    mcp_tools: dict[str, Any]
     testbed: DockerTestbed
 
     def get_instruction_prompt(self) -> str:
@@ -237,30 +235,9 @@ class SWEAgent(Agent):
 
         return out
 
-    def create_prompt(self) -> str:
-
-        out = ""
-        if self.executed:
-            info = self.exec_result.strip()
-            if not info.replace("''", "", 1).strip():
-                info = "'[Code executed, but no print occured]'"
-            out += (
-                f"<SANDBOX_OUTPUT>\n{info}\n"
-                "</SANDBOX_OUTPUT>\n\n"
-            )
-        out += self.get_instruction_prompt()
-
-        return out
-
-    def check_solution(self) -> tuple[bool, str]:
-        read, final = self.sandbox_term("run_tests()")
-        if "[OK]" in read:
-            return (True, "")
-        return (False, "no '[OK]' in test script output")
-
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
-        sandbox = Sandbox(self.sandbox_config, tools=self.mcp_tools)
+        sandbox = Sandbox(self.sandbox_config)
         try:
             status, value, output = sandbox.run(code + "\n")
             match status:
@@ -276,6 +253,12 @@ class SWEAgent(Agent):
             raise
         finally:
             sandbox.stop()
+
+    def check_solution(self) -> tuple[bool, str]:
+        read, final = self.sandbox_term("run_tests()")
+        if "[OK]" in read:
+            return (True, "")
+        return (False, "no '[OK]' in test script output")
 
 
 def create_mbpp_agent(testbed: DockerTestbed, task: SWEBenchTaskInput,

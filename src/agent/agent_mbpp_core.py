@@ -8,7 +8,10 @@ import pexpect
 from src.agent.agent import Agent
 from src.agent.helpers import Log, LlmApi
 from src.agent.memoryprompt import MemoryPrompt
-
+from src.common.models import SandboxConfig, SWEBenchTaskInput
+from src.sandbox.execute import Sandbox
+from src.sandbox.manual import build_manual
+from src.sandbox.mcp_client import McpClient
 
 """ MBPP
 Implement an agent CLI interface
@@ -30,44 +33,30 @@ class MBPPBasePrompts:
 
     @classmethod
     def get_first_prompts(cls, function_definition: str, task_definition: str, test_imports: list[str],
-                          test_list: list[str]) -> tuple[str, str]:
+            test_list: list[str], manual: str) -> tuple[str, str]:
         system_prompt = (
             "You are a python coding agent "
-            "specialised to resolve MBPP problems.\n"
-            "You need to resolve Mostly Basic Python Problems.\n"
-            "Create the function demanded by the user with the associed requirements all in python.\n"
-            "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user.\n"
+            "specialised to resolve Mostly Basic Python Problems (MBPP).\n"
+            "You are in a fully automated pipeline, all the code you give is used in a sandbox.\n"
             "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
-            "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
-            "You have to use one single python code block.\n"
-            "Be smart and wait the result of your message to advise what to do next.\n"
-            "Do not use python code block inside python code block !\n"
-            "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
+            "Use snippet:\n```python\n<code>\n```\n"
+            "It is entirely up to you to resolve the problem.\n"
+            "If you find the solution and the tests pass; use the following function with the solution code as string in argument:\n"
             "```python\nfinal_answer(code: str)\n```\n"
-            "Use final_answer if the code pass tests.\n"
         )
-        command = ["uv", "run", "sandbox", "--manual",
-                   "--mcp-stdio", "uv run python mcp_tools_mbpp.py"]
-        result = subprocess.run(
-            command,
-            cwd=".",
-            capture_output=True,
-            text=True,
-        )
-        system_prompt += "<SANDBOX_RULES>\n" + \
-            str(result.stdout) + "\n</SANDBOX_RULES>\n"
+        system_prompt += "<SANDBOX_RULES>\n" + manual
+        if test_imports:
+            system_prompt += f"\nFollowing modules are already imported in the environement: {test_imports}"
+        system_prompt += "\n</SANDBOX_RULES>\n"
 
         user_prompt = (
             "<MAIN_OBJECTIVE>\n"
-            f"You need to create a python function:\n"
+            "You need to create a python function:\n"
             f"Function definition: {function_definition}\n"
             f"Description: {task_definition}\n"
         )
-        if test_imports:
-            user_prompt += "Modules already imported in the environement are: {test_imports}\n"
         if test_list:
             user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
-
         user_prompt += "</MAIN_OBJECTIVE>\n"
         return (system_prompt, user_prompt)
 
@@ -94,82 +83,82 @@ class MBPPAgent(Agent):
     timeout: float = 120  # TODO
 
     test_list: list[str]
-    sandbox_cmd: list[str]
-
 
     def get_instruction_prompt(self) -> None:
 
-        out = ""
-        out += (
+        out = (
             "<INSTRUCTIONS>\n"
-            "Within the SANDBOX_RULES restrictions\n"
-            "You have to:\n"
-            "   [1]: create the function of the MAIN_OBJECTIVE.\n"
-            "   [2]: test assertions of the MAIN_OBJECTIVE.\n"
-            "   [sandbox error]: If the sandbox encounters an error due to restrictions violation, use a different way to create the function (go to step 1 again).\n"
-            "   [function error]: If the assertions fail, try a new solution to resolve the MAIN_PROBLEM (go to step 1 again).\n"
-            "   [3] If tests of the step (2) pass, use final_answer tool with the solution code string as argument.\n"
-            "</INSTRUCTIONS>\n"
             "<OUTPUT_FORMAT>\n"
-            "A single line of affirmative thought and a single python code snippet :\n"
+            "A short line of affirmative thought and a single python code snippet :\n"
             "<thoughts>\n"
             "```python\n<code>\n```>\n"
-            "</OUTPUT_FORMAT>\n"
-            "Follow instructions."
+            "</OUTPUT_FORMAT>\n\n"
         )
+        if MemoryPrompt.tries:
+            if len(MemoryPrompt.tries) > 1:
+                msg_attempts = "LAST_ATTEMPT and FAILED_ATTEMPTS"
+            else:
+                msg_attempts = "LAST_ATTEMPT"
+            out += (
+                # "<PRIMAL_DIRECTIVE>\n"
+                "Only if the LAST_ATTEMPT is without ERROR, use final_answer tool with the LAST_ATTEMPT solution code as argument.\n"
+                # "</PRIMAL_DIRECTIVE>\n"
+                f"Otherwise, use the information in {msg_attempts} to accomplish the following tasks:\n"
+                "\t1: create the function of the MAIN_OBJECTIVE.\n"
+                "\t2: test assertions of the MAIN_OBJECTIVE.\n"
+                "\tRules:\n"
+                "\t\tuse one single snippet.\n"
+                "\t\tfollow the SANDBOX_RULES restrictions.\n"
+                "\t\tif the sandbox encounters an error due to restrictions violation, use a different way to create the function.\n"
+                "\t\tif the assertions fail, try a new solution to resolve the MAIN_PROBLEM.\n"
+            )
+        else:
+            out += (
+                "You have to:\n"
+                "\t1: create the function of the MAIN_OBJECTIVE.\n"
+                "\t2: test assertions of the MAIN_OBJECTIVE.\n"
+                "\tRules:\n"
+                "\t\tuse one single snippet.\n"
+                "\t\tfollow the SANDBOX_RULES restrictions.\n"
+            )
+        out += (
+            "</INSTRUCTIONS>\n"
+        )
+     #   if MemoryPrompt.tries:
+     #       out += (
+     #           "If the LAST_ATTEMPT is without error, "
+     #           "use final_answer tool with the solution code string as argument.\n"
+     #           "Otherwise; Follow instructions."
+     #       )
+     #   else:
+        out += "Follow INSTRUCTIONS, and use OUTPUT_FORMAT"
         return out
 
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
-        result = ""
-        term = pexpect.spawn(self.sandbox_cmd[0],
-                             self.sandbox_cmd[1:], encoding="utf-8")
-        lines = code.split("\n")
-        while lines and lines[-1].strip() == "":
-            lines.pop()
+        sandbox = Sandbox(self.sandbox_config)
         try:
-            term.setecho(True)
-            term.expect_exact([">>> ", "... "])
-            result += term.after
-            for line in lines:
-                term.sendline(line)
-                term.expect_exact(
-                    ["\n>>> ", "\n... ", "\n[error] ", "\n[final_answer] ."])
-                result += term.before + term.after
-                if term.after.startswith("\n[error] "):
-                    term.sendline("")
-                    term.expect_exact(["\n>>> ", "\n... "])
-                    result += term.before
-                    break
-                if term.after.startswith("\n[final_answer] ."):
-                    break
-            term.sendline("")
-            term.sendline("exit")
+            status, value, output = sandbox.run(code + "\n")
+            outputs = code
+            if output:
+                outputs += f"\n[STDOUT]:\n{output}"
+
+            match status:
+                case "final_answer":
+                    if not value:
+                        Log.print("[final_answer without value !!!]")
+                    return (output, value)
+                case "ok":
+                    if "assert" in code:
+                        outputs += "\n[ALL ASSERTS PASSED]"
+                    return (outputs, "")
+                case _:
+                    outputs += f"\n[ERROR]\n{value}\n[/ERROR]"
+                    return (outputs, "")
         except Exception:
             raise
         finally:
-            term.terminate(force=True)
-        read = result.replace("\r\n", "\n")
-
-        if read.rstrip().endswith("[final_answer] ."):
-            final = read.split("[final_answer] ")[1]
-            return (read, final)
-        return (read, "")
-
-    def create_prompt(self) -> str:
-
-        out = ""
-        if self.executed:
-            info = self.exec_result.strip()
-            if not info.replace("''", "", 1).strip():
-                info = "'[Code executed, but no print occured]'"
-            out += (
-                f"<SANDBOX_OUTPUT>\n{info}\n"
-                "</SANDBOX_OUTPUT>\n\n"
-            )
-        out += self.get_instruction_prompt()
-
-        return out
+            sandbox.stop()
 
     def check_solution(self) -> tuple[bool, str]:
 
@@ -191,24 +180,29 @@ def create_mbpp_agent(task_file: str, output: str = "mbpp_solution.json",
     with open(task_file, "r") as file:
         mbpp_data = json.load(file)
     task = NewMBPPTaskInput(data=mbpp_data).data
+    client = McpClient("uv run python mcp_tools_mbpp.py")
+    config = SandboxConfig()
+    manual = build_manual(config, client.specs, client.resources, client.prompts)
 
     pr = MBPPBasePrompts.get_first_prompts(
         task.function_definition,
         task.task_definition, task.test_imports,
-        task.test_list)
+        task.test_list,
+        manual
+    )
     system_prompt, user_prompt = pr
     MemoryPrompt.init(system_prompt, user_prompt)
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
-    command = ["uv", "run", "sandbox", "--mcp-stdio",
-                "uv run python mcp_tools_mbpp.py"]
     agent = MBPPAgent(
         task_id=str(task.task_id), benchmark="mbpp",
         system_prompt=system_prompt, output_path=output,
         test_list=task.test_list,
         llmapi=llmapi,
         imports="\n".join(f"import {imp}" for imp in task.test_imports),
-        sandbox_cmd=command
+
+        mcp_tools=client.tools,
+        sandbox_config=SandboxConfig()
     )
     MemoryPrompt.add_message(agent.get_instruction_prompt())
     return agent

@@ -72,11 +72,11 @@ class MemoryPrompt:
         cls.messages.append({"role": "user", "content": base_prompt_user})
 
         cls.base_user = base_prompt_user
-        cls.hints: list[str] = []
-        cls.hypothesis: list[dict[str, str]] = []
 
         if memory_mode:
             cls.memory_mode = True
+            cls.hints: list[str] = []
+            cls.hypothesis: list[dict[str, str]] = []
             cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
             cls.step_memory = []
             cls.next_step = {
@@ -89,6 +89,8 @@ class MemoryPrompt:
             cls.current_step = "investigate"
             cls.previous_step = "investigate"
             cls.loop_retry = 0
+        else:
+            cls.tries = []
 
     # Spceial Method usable by the llm
     @classmethod
@@ -114,6 +116,10 @@ class MemoryPrompt:
         cls.hints.append(msg)
         print("hint saved")
         cls.simple_go_next_step()
+
+    @classmethod
+    def save_try(cls, msg: str) -> None:
+        cls.tries.append(msg)
 
     # Spceial Method usable by the llm
     @classmethod
@@ -287,19 +293,25 @@ class MemoryPrompt:
         
         msg = cls.base_user
         
-        if not cls.hints and not cls.hypothesis:
-            return msg
+        if cls.memory_mode:
+            if not cls.hints and not cls.hypothesis:
+                return msg
 
-        msg += "\n<KNOWN_INFO>\n"
-        for i, elem in enumerate(cls.hints, 1):
-            msg += f"[{i}] {elem}\n"
-        if cls.hypothesis:
-            msg += "<HYPOTHESES>\n"
-            for elem in cls.hypothesis:
-                msg += f"{elem['hyp']} | {elem['rule_on']}"
-            msg += "</HYPOTHESES>\n"
+            msg += "\n<KNOWN_INFO>\n"
+            for i, elem in enumerate(cls.hints, 1):
+                msg += f"[{i}] {elem}\n"
+            if cls.hypothesis:
+                msg += "<HYPOTHESES>\n"
+                for elem in cls.hypothesis:
+                    msg += f"{elem['hyp']} | {elem['rule_on']}"
+                msg += "</HYPOTHESES>\n"
 
-        msg += "</KNOWN_INFO\n>"
+            msg += "</KNOWN_INFO>"
+        elif len(cls.tries) > 1:
+            msg += "\n<FAILED_ATTEMPTS>\n"
+            for i, elem in enumerate(cls.tries[:-1], 1):
+                msg += f"<TRY_[{i}]>\n{elem}\n</TRY_[{i}]>\n"
+            msg += "</FAILED_ATTEMPTS>"
         return msg
 
     @classmethod

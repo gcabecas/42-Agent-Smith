@@ -1,9 +1,11 @@
 
 from pydantic import BaseModel, Field
 import sys
-from typing import Optional
+from typing import Any, Optional
 from datetime import datetime
 
+from src.sandbox.execute import Sandbox
+from src.common.models import SandboxConfig
 from src.agent.stepmetrics import StepMetrics
 from src.agent.memoryprompt import MemoryPrompt
 from src.agent.helpers import Log, LlmApi
@@ -55,11 +57,15 @@ class Agent(SolutionOutput):
     output_path: str = Field(pattern=r".*\.json$")
 
     llmapi: LlmApi
+    sandbox_config: SandboxConfig
+    mcp_tools: dict[str, Any]
+
     exec_result: str = ""
     start: datetime = datetime.now()
     imports: str = ""
     executed: bool = False
     previous_sandbox_output: str = ""
+
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -75,13 +81,25 @@ class Agent(SolutionOutput):
         time = datetime.now() - start
         new.request_time_ms = time.total_seconds() * 1000
 
-        msg = "[ STEP FINISHED ]------------------------"
+        msg = f"[(ID {self.task_id}) STEP FINISHED ]------------------------"
         for key, elem in new.__dict__.items():
             msg += f"||{key}|=|{elem}||\n"
         for elem in MemoryPrompt.messages:
             msg += f"{str(elem)}\n"
         msg += f"tot in: {self.total_input_tokens} || tot out: {self.total_output_tokens}\n\n"
         Log.print(msg)
+
+    def create_prompt(self, flag: str) -> str:
+
+        out = ""
+        if self.executed:
+            out += (
+                f"<{flag}>\n{self.exec_result}\n"
+                f"</{flag}>\n\n"
+            )
+        out += self.get_instruction_prompt()
+
+        return out
 
     def next_step(self) -> bool:
 
@@ -130,7 +148,9 @@ print("bye")
                 if self.imports:
                     code = f"{self.imports}\n{code}"
                 read, final = self.sandbox_term(code)
-                if len(read) > 5000:
+                if not read.replace("''", "", 1).strip():
+                    read = "'[Code executed, but no print occured]'"
+                elif len(read) > 5000:
                     if not "test" in resp["llm_output"]:
                         err_msg = (
                             "\n<WARNING>\n"
@@ -177,12 +197,14 @@ print("bye")
                         MemoryPrompt.simple_go_next_step()
 
             MemoryPrompt.apply_go_next_step(self.testbed)
-            prompt = self.create_prompt()
+            prompt = self.create_prompt("SANDBOX_OUTPUT")
             MemoryPrompt.add_message(prompt)
         else:
+            MemoryPrompt.save_try(new.sandbox_output)
             MemoryPrompt.compress_user_msg(self.previous_sandbox_output, self.executed)
             self.previous_sandbox_output = new.sandbox_output
-            prompt = self.create_prompt()
+            MemoryPrompt.compress_memory()
+            prompt = self.create_prompt("LAST_ATTEMPT")
             MemoryPrompt.add_message(prompt)
 
         msg = ""
