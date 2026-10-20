@@ -120,7 +120,6 @@ class SWEAgent(Agent):
     sandbox_config: SandboxConfig
     mcp_tools: dict[str, Any]
     testbed: DockerTestbed
-    previous_sandbox_output: str = ""
 
     def get_instruction_prompt(self) -> str:
 
@@ -228,8 +227,9 @@ class SWEAgent(Agent):
             out += (
                 "\nUse one only tool and wait for its result.\n"
                 "<OUTPUT_FORMAT>\n"
-                "<a single line of affirmative thought>\n"
-                "```python\n<code>\n```\n"
+                "A single line of affirmative thought and a single python code snippet :\n"
+                "<thoughts>\n"
+                "```python\n<code>\n```>\n"
                 "</OUTPUT_FORMAT>\n"
                 "</INSTRUCTIONS>\n"
                 "Follow instructions."
@@ -240,7 +240,6 @@ class SWEAgent(Agent):
     def create_prompt(self) -> str:
 
         out = ""
-
         if self.executed:
             info = self.exec_result.strip()
             if not info.replace("''", "", 1).strip():

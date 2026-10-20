@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 import pexpect
 
 from src.agent.agent import Agent
-from src.agent.helpers import Log, LlmApi, MemoryPrompt
+from src.agent.helpers import Log, LlmApi
+from src.agent.memoryprompt import MemoryPrompt
 
 
 """ MBPP
@@ -28,37 +29,17 @@ uv run moulinette_eval validate mbpp ../cache/mbpp_task.json \
 class MBPPBasePrompts:
 
     @classmethod
-    def get_aftercode_prompt(cls, sandbox_output: str) -> str:
-        info = sandbox_output.strip()
-        if info:
-            out =(
-                f"[sandbox output]:(\n{info}\n"
-                ")\n\n"
-                "If the sandbox output is empty or encounter an error try something different ! "
-                "Otherwise continue investigate with test code and eventual tools or end the process with final_answer"
-            )
-        else:
-            out = "Your code was executed, but no print occured"
-        return out
-
-    @classmethod
-    def get_nocode_prompt(cls) -> str:
-        out = "Now you thought about the problem, use code and eventually tools to continue the searches\n"
-        return out
-
-    @classmethod
     def get_first_prompts(cls, function_definition: str, task_definition: str, test_imports: list[str],
                           test_list: list[str]) -> tuple[str, str]:
         system_prompt = (
             "You are a python coding agent "
-            "specialised to resolve MBPP problems. "
-            "You need to resolve Mostly Basic Python Problems. "
-            "Create the function demanded by the user with the associed requirements all in python. "
-            "Only code is important the user will not read your comments.\n"
-            "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user. "
+            "specialised to resolve MBPP problems.\n"
+            "You need to resolve Mostly Basic Python Problems.\n"
+            "Create the function demanded by the user with the associed requirements all in python.\n"
+            "You are in a fully automated pipeline, all the code you give is used in a sandbox and the output is returned by the user.\n"
             "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
             "So all the code you give, including Mcp-Tools usage need to be in python code block:\n```python\n<CODE>\n```\n"
-            "ONLY YOUR FIRST CODE BLOCK WILL BE EXECUTED !\n"
+            "You have to use one single python code block.\n"
             "Be smart and wait the result of your message to advise what to do next.\n"
             "Do not use python code block inside python code block !\n"
             "FOR END RESOLVING USE THE FOLLOWING FUNCTION WITH THE CODE AS ARGUMENT :\n"
@@ -78,12 +59,12 @@ class MBPPBasePrompts:
 
         user_prompt = (
             "<MAIN_OBJECTIVE>\n"
-            f"You need to create a python function :"
-            f"Description: {task_definition}\n"
+            f"You need to create a python function:\n"
             f"Function definition: {function_definition}\n"
+            f"Description: {task_definition}\n"
         )
         if test_imports:
-            user_prompt += "Premade imports of the environement are: {test_imports}\n"
+            user_prompt += "Modules already imported in the environement are: {test_imports}\n"
         if test_list:
             user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
 
@@ -114,6 +95,29 @@ class MBPPAgent(Agent):
 
     test_list: list[str]
     sandbox_cmd: list[str]
+
+
+    def get_instruction_prompt(self) -> None:
+
+        out = ""
+        out += (
+            "<INSTRUCTIONS>\n"
+            "Within the SANDBOX_RULES restrictions\n"
+            "You have to:\n"
+            "   [1]: create the function of the MAIN_OBJECTIVE.\n"
+            "   [2]: test assertions of the MAIN_OBJECTIVE.\n"
+            "   [sandbox error]: If the sandbox encounters an error due to restrictions violation, use a different way to create the function (go to step 1 again).\n"
+            "   [function error]: If the assertions fail, try a new solution to resolve the MAIN_PROBLEM (go to step 1 again).\n"
+            "   [3] If tests of the step (2) pass, use final_answer tool with the solution code string as argument.\n"
+            "</INSTRUCTIONS>\n"
+            "<OUTPUT_FORMAT>\n"
+            "A single line of affirmative thought and a single python code snippet :\n"
+            "<thoughts>\n"
+            "```python\n<code>\n```>\n"
+            "</OUTPUT_FORMAT>\n"
+            "Follow instructions."
+        )
+        return out
 
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
@@ -153,10 +157,18 @@ class MBPPAgent(Agent):
         return (read, "")
 
     def create_prompt(self) -> str:
-        if self.exec_result:
-            out = MBPPBasePrompts.get_aftercode_prompt(self.exec_result)
-        else:
-            out = MBPPBasePrompts.get_nocode_prompt()
+
+        out = ""
+        if self.executed:
+            info = self.exec_result.strip()
+            if not info.replace("''", "", 1).strip():
+                info = "'[Code executed, but no print occured]'"
+            out += (
+                f"<SANDBOX_OUTPUT>\n{info}\n"
+                "</SANDBOX_OUTPUT>\n\n"
+            )
+        out += self.get_instruction_prompt()
+
         return out
 
     def check_solution(self) -> tuple[bool, str]:
@@ -188,9 +200,8 @@ def create_mbpp_agent(task_file: str, output: str = "mbpp_solution.json",
     MemoryPrompt.init(system_prompt, user_prompt)
     llmapi = LlmApi(providers_file, provider_url, model_name)
 
-    # TODO use arguments in a json file
     command = ["uv", "run", "sandbox", "--mcp-stdio",
-                "uv run python mcp_tools_swebench.py"]
+                "uv run python mcp_tools_mbpp.py"]
     agent = MBPPAgent(
         task_id=str(task.task_id), benchmark="mbpp",
         system_prompt=system_prompt, output_path=output,
@@ -199,6 +210,7 @@ def create_mbpp_agent(task_file: str, output: str = "mbpp_solution.json",
         imports="\n".join(f"import {imp}" for imp in task.test_imports),
         sandbox_cmd=command
     )
+    MemoryPrompt.add_message(agent.get_instruction_prompt())
     return agent
 
 

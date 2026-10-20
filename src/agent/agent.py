@@ -59,6 +59,7 @@ class Agent(SolutionOutput):
     start: datetime = datetime.now()
     imports: str = ""
     executed: bool = False
+    previous_sandbox_output: str = ""
 
     def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
 
@@ -122,7 +123,9 @@ print("bye")
         codes = MemoryPrompt.get_message_codes()
 
         self.exec_result = ""
-        if  len(codes) >= 1:
+        is_code = [elem for elem in codes if elem.strip()]
+        if is_code:
+            self.executed = True
             for i, code in enumerate(codes, 1):
                 if self.imports:
                     code = f"{self.imports}\n{code}"
@@ -136,7 +139,6 @@ print("bye")
                             "</WARNING>"
                         )
                         read = read[:5000] + err_msg
-                self.executed = True
                 if len(codes) > 1:
                     new.sandbox_input += f"[codeblock: {i}]\n{code}\n"
                     new.sandbox_output += f"[codeblock: {i}]\n{read}\n"
@@ -160,7 +162,7 @@ print("bye")
             if loop:
                 self.executed = False
             else:
-                MemoryPrompt.compress_user_msg(self.previous_sandbox_output)
+                MemoryPrompt.compress_user_msg(self.previous_sandbox_output, self.executed)
                 self.previous_sandbox_output = new.sandbox_output
 
             if MemoryPrompt.current_step == "investigate":
@@ -178,6 +180,8 @@ print("bye")
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
         else:
+            MemoryPrompt.compress_user_msg(self.previous_sandbox_output, self.executed)
+            self.previous_sandbox_output = new.sandbox_output
             prompt = self.create_prompt()
             MemoryPrompt.add_message(prompt)
 

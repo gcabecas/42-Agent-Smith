@@ -71,9 +71,12 @@ class MemoryPrompt:
         cls.messages = [{"role": "system", "content": base_prompt_system}]
         cls.messages.append({"role": "user", "content": base_prompt_user})
 
+        cls.base_user = base_prompt_user
+        cls.hints: list[str] = []
+        cls.hypothesis: list[dict[str, str]] = []
+
         if memory_mode:
             cls.memory_mode = True
-            cls.base_user = base_prompt_user
             cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
             cls.step_memory = []
             cls.next_step = {
@@ -85,8 +88,6 @@ class MemoryPrompt:
             }
             cls.current_step = "investigate"
             cls.previous_step = "investigate"
-            cls.hints: list[str] = []
-            cls.hypothesis: list[dict[str, str]] = []
             cls.loop_retry = 0
 
     # Spceial Method usable by the llm
@@ -144,7 +145,6 @@ class MemoryPrompt:
 
     @classmethod
     def loop_reaction_msg(cls, failer: str) -> str:
-        known_info = cls.new_base_user_prompt(False)
         if cls.loop_retry == 1:
             out = (
                 f"['{failer}' rejected cos duplicate information]\n"
@@ -283,12 +283,9 @@ class MemoryPrompt:
             testbed.reset_data()
    
     @classmethod
-    def new_base_user_prompt(cls, with_base: bool = True) -> str:
+    def new_base_user_prompt(cls) -> str:
         
-        if with_base:
-            msg = cls.base_user
-        else:
-            msg = ""
+        msg = cls.base_user
         
         if not cls.hints and not cls.hypothesis:
             return msg
@@ -313,20 +310,30 @@ class MemoryPrompt:
         cls.messages[1]["content"] = msg
 
     @classmethod
-    def compress_user_msg(cls, previous_sandbox_output: str) -> None:
+    def compress_user_msg(cls, previous_sandbox_output: str, executed: bool) -> None:
 
         if len(cls.messages) == 3:
             cls.messages[-2]["content"] = cls.new_base_user_prompt()
         else:
-            info = previous_sandbox_output
-            if not info.replace("''", "", 1).strip():
-                info = "'[Code executed, but no print occured]'"
-            cls.messages[-2]["content"] = (
-                    f"<{cls.previous_step.upper()}_OUTPUT>"
+            if executed:
+                info = previous_sandbox_output
+                if not info.replace("''", "", 1).strip():
+                    info = "'[Code executed, but no print occured]'"
+                if cls.memory_mode:
+                    flag = f"{cls.previous_step.upper()}_OUTPUT"
+                else:
+                    flag = "OUTPUT"
+                msg = (
+                    f"<{flag}>"
                     f"\n{info}\n"
-                    f"</{cls.previous_step.upper()}_OUTPUT>"
-            )
-        cls.previous_step = cls.current_step
+                    f"</{flag}>"
+                )
+            else:
+                msg = "[The previous message did not execute any code.]"
+
+            cls.messages[-2]["content"] = msg
+        if cls.memory_mode:
+            cls.previous_step = cls.current_step
 
     @classmethod
     def get_messages(cls) -> list[dict[str, str]]:
