@@ -41,8 +41,6 @@ class MBPPBasePrompts:
             "Code executed in the sandbox have direct access to MCP-Tools functions for specials needs.\n"
             "Use snippet:\n```python\n<code>\n```\n"
             "It is entirely up to you to resolve the problem.\n"
-            "If you find the solution and the tests pass; use the following function with the solution code as string in argument:\n"
-            "```python\nfinal_answer(code: str)\n```\n"
         )
         system_prompt += "<SANDBOX_RULES>\n" + manual
         if test_imports:
@@ -53,7 +51,7 @@ class MBPPBasePrompts:
             "<MAIN_OBJECTIVE>\n"
             "You need to create a python function:\n"
             f"Function definition: {function_definition}\n"
-            f"Description: {task_definition}\n"
+            f"DESCRIPTION: {task_definition}\n"
         )
         if test_list:
             user_prompt += f"Python assertion(s) need to pass: {test_list}\n"
@@ -81,64 +79,71 @@ class MBPPAgent(Agent):
     max_output_tokens: int = 1500
     max_steps: int = 10
     timeout: float = 120  # TODO
-
     test_list: list[str]
+    state: str = "normal"
 
     def get_instruction_prompt(self) -> None:
 
         out = (
             "<INSTRUCTIONS>\n"
             "<OUTPUT_FORMAT>\n"
-            "A short line of affirmative thought and a single python code snippet :\n"
+            "Think briefly to comply INSTRUCTIONS, then give a single python code snippet:\n"
             "<thoughts>\n"
             "```python\n<code>\n```>\n"
             "</OUTPUT_FORMAT>\n\n"
         )
-        if MemoryPrompt.tries:
+        out = ""
+        if self.state == "final_answer":
+            out += (
+                "ALL ASSERTS PASSED !\n"
+                "You find the solution and the tests passed.\n"
+                "Use final_answer tool with the LAST_ATTEMPT solution code as string argument.\n"
+                "```python\nfinal_answer(code: str)\n```\n"
+            )
+        elif MemoryPrompt.tries:
             if len(MemoryPrompt.tries) > 1:
                 msg_attempts = "LAST_ATTEMPT and FAILED_ATTEMPTS"
             else:
                 msg_attempts = "LAST_ATTEMPT"
             out += (
-                # "<PRIMAL_DIRECTIVE>\n"
-                "Only if ALL ASSERTS PASSED in the LAST_ATTEMPT, use final_answer tool with the LAST_ATTEMPT solution code as argument.\n\n"
-                # "</PRIMAL_DIRECTIVE>\n"
-                f"Otherwise, use the information in {msg_attempts} to accomplish the following tasks:\n"
-                "\t1: create the function of the MAIN_OBJECTIVE.\n"
-                "\t2: test assertions of the MAIN_OBJECTIVE.\n"
+                f"ERROR occurred in LAST_ATTEMPT, propose a different function from {msg_attempts}, to this time, accomplish the task:"
+                "\tCreate the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
+                #"\t2: test assertions of the MAIN_OBJECTIVE.\n"
                 "\tRules:\n"
                 "\t\tuse one single snippet.\n"
                 "\t\tfollow the SANDBOX_RULES restrictions.\n"
-                "\t\tif the sandbox encounters an ERROR due to restrictions violation, use a different way to create the function.\n"
-                "\t\tif the assertions fail (ERROR), try a new solution to resolve the MAIN_PROBLEM.\n"
+                "\t\tif LAST_ATTEMPT encounters an ERROR due to sandbox restrictions violation, use a different way to create the function.\n"
+                "\t\tif LAST_ATTEMPT assertions fail (ERROR), use a new solution matching the DESCRIPTION.\n"
                 "\t\tdo not use final_answer"
             )
         else:
             out += (
                 "You have to:\n"
-                "\t1: create the function of the MAIN_OBJECTIVE.\n"
-                "\t2: test assertions of the MAIN_OBJECTIVE.\n"
+                "\tCreate the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
+                #"\t2: test assertions of the MAIN_OBJECTIVE.\n"
                 "\tRules:\n"
                 "\t\tuse one single snippet.\n"
                 "\t\tfollow the SANDBOX_RULES restrictions.\n"
+                "\t\tdo not use final_answer"
             )
         out += (
             "</INSTRUCTIONS>\n"
         )
-     #   if MemoryPrompt.tries:
-     #       out += (
-     #           "If the LAST_ATTEMPT is without error, "
-     #           "use final_answer tool with the solution code string as argument.\n"
-     #           "Otherwise; Follow instructions."
-     #       )
-     #   else:
-        out += "Follow INSTRUCTIONS, and use OUTPUT_FORMAT"
+        out += (
+            "Follow INSTRUCTIONS, and use OUTPUT_FORMAT"
+            # "Think briefly about INSTRUCTIONS, then give a single python code snippet:\n"
+            #  "<thoughts>\n"
+             # "```python\n<code>\n```>\n"
+        )
         return out
 
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
         sandbox = Sandbox(self.sandbox_config)
         try:
+            for elem in self.test_list:
+                if elem not in code:
+                    code += f"{elem}\n"
             status, value, output = sandbox.run(code + "\n")
             outputs = ""
             for i, elem in enumerate(outputs.split("\n"), 1):
@@ -155,6 +160,7 @@ class MBPPAgent(Agent):
                 case "ok":
                     if "assert" in code:
                         outputs += "\n[ALL ASSERTS PASSED]"
+                        self.state = "final_answer"
                     return (outputs, "")
                 case _:
                     outputs += f"\n[ERROR]\n{value}\n[/ERROR]"
@@ -171,8 +177,8 @@ class MBPPAgent(Agent):
             asserts += f"\n\n{elem}"
 
         code = f"{self.imports}\n\n{self.solution}\n\n{asserts}"
-        read = self.sandbox_term(code)
-        if "[error]" in read:
+        read, _ = self.sandbox_term(code)
+        if not "[ALL ASSERTS PASSED]" in read:
             return (False, read)
         return (True, "no error")
 

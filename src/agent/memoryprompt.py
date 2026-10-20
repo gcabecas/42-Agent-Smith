@@ -119,7 +119,8 @@ class MemoryPrompt:
 
     @classmethod
     def save_try(cls, msg: str) -> None:
-        cls.tries.append(msg)
+        if msg not in cls.tries:
+            cls.tries.append(msg)
 
     # Spceial Method usable by the llm
     @classmethod
