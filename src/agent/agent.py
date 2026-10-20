@@ -252,6 +252,10 @@ print("bye")
                 output.success and
                 success
         )
+        if output.success:
+            Log.print(f"[{output.benchmark.upper()}_SUCCESS_END]")
+        else:
+            Log.print(f"[{output.benchmark.upper()}FAILURE_END]")
 
         try:
             with open(self.output_path, "w") as f_open:
