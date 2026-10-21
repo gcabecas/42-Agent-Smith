@@ -125,11 +125,15 @@ class SWEAgent(Agent):
         )
         if MemoryPrompt.current_step == "investigate":
             out += (
-                "Based on information of : PROBLEM, KNOWN_INFO and INVESTIGATE_OUTPUT.\n"
+                "Based on information of : PROBLEM, KNOWN_INFO.\n"
                 "Use SANDBOX_TOOLS  to get information permitting to resolve the PROBLEM.\n"
                 "Investigate for missing information.\n"
                 "Search where is located the bug(s).\n"
-                "Optimise your tool usage; exemple: if reading, read a whole block no few lines.\n"
+                "Get the full problematic node (the full function of even the full file).\n"
+                "[1]: find the problematic files.\n"
+                "[2]: find the problematic functions.\n"
+                "[3]: find the problematic lines.\n"
+                "Optimise your tool usage; exemple: if reading, don't read few lines.\n"
                 "Use one only tool and wait for its result.\n"
                 # "You don't have to modifie/add or test, focus on the investigation.\n"
                 "If the information provided indicates the cause of the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n"
@@ -142,9 +146,9 @@ class SWEAgent(Agent):
         elif MemoryPrompt.current_step == "modifie":
             out += (
                 f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
-                "Based on information of : HYPOTHESIS, INVESTIGATE_OUTPUT and KNOWN_INFO.\n"
-                "Modifie files and eventual folders with available SANDBOX_TOOLS.\n"
+                "Based on information of : PROBLEM, HYPOTHESIS, INVESTIGATE_OUTPUT and KNOWN_INFO.\n"
                 "You have to do the minimal changes to fully resolve the PROBLEM.\n"
+                "Modifie files and eventual folders with available SANDBOX_TOOLS.\n"
                 "Use one only tool and wait for its result.\n"
                 # "You don't have to investigate or test now, focus on the modifications.\n"
                 "If the necessary was modified/added permitting to resolve the PROBLEM, use the go_next_step SPECIAL_TOOL.\n"
@@ -246,7 +250,7 @@ class SWEAgent(Agent):
 
         sandbox = Sandbox(self.sandbox_config, tools=self.mcp_tools)
         try:
-            status, value, output = sandbox.run(code + "\n")
+            status, value, output = sandbox.run("\n" + code + "\n")
             match status:
                 case "final_answer":
                     if not value:
