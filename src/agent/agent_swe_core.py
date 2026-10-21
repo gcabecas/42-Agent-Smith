@@ -225,7 +225,7 @@ class SWEAgent(Agent):
             out += (
                 "\nUse one only tool and wait for its result.\n"
                 "<OUTPUT_FORMAT>\n"
-                "A single line of affirmative thought and a single python code snippet :\n"
+                "Think briefly to comply with INSTRUCTIONS, then give a single python code snippet:\n"
                 "<thoughts>\n"
                 "```python\n<code>\n```>\n"
                 "</OUTPUT_FORMAT>\n"

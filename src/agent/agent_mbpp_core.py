@@ -84,15 +84,24 @@ class MBPPAgent(Agent):
 
     def get_instruction_prompt(self) -> None:
 
-        out = (
-            "<INSTRUCTIONS>\n"
-            "<OUTPUT_FORMAT>\n"
-            "Think briefly to comply INSTRUCTIONS, then give a single python code snippet:\n"
-            "<thoughts>\n"
-            "```python\n<code>\n```>\n"
-            "</OUTPUT_FORMAT>\n\n"
-        )
-        out = ""
+        if self.state == "final_answer" or not MemoryPrompt.tries:
+            out = (
+                "<INSTRUCTIONS>\n"
+                "<OUTPUT_FORMAT>\n"
+                "Think briefly to comply with INSTRUCTIONS, then give a single python code snippet:\n"
+                "<thoughts>\n"
+                "```python\n<code>\n```>\n"
+                "</OUTPUT_FORMAT>\n\n"
+            )
+        else:
+            out = (
+                "<INSTRUCTIONS>\n"
+                "<OUTPUT_FORMAT>\n"
+                "Think briefly why LAST_ATTEMPT failed and how to succeed this time by following INSTRUCTIONS. Then give a single python code snippet:\n"
+                "<thoughts>\n"
+                "```python\n<code>\n```>\n"
+                "</OUTPUT_FORMAT>\n\n"
+            )
         if self.state == "final_answer":
             out += (
                 "ALL ASSERTS PASSED !\n"
@@ -106,25 +115,23 @@ class MBPPAgent(Agent):
             else:
                 msg_attempts = "LAST_ATTEMPT"
             out += (
-                f"ERROR occurred in LAST_ATTEMPT, propose a different function from {msg_attempts}, to this time, accomplish the task:"
-                "\tCreate the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
+                "Create the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
+                "Use one single snippet.\n"
+                "Follow the SANDBOX_RULES restrictions.\n"
+                f"ERROR occurred in LAST_ATTEMPT, propose a different function from {msg_attempts}.\n"
                 #"\t2: test assertions of the MAIN_OBJECTIVE.\n"
-                "\tRules:\n"
-                "\t\tuse one single snippet.\n"
-                "\t\tfollow the SANDBOX_RULES restrictions.\n"
-                "\t\tif LAST_ATTEMPT encounters an ERROR due to sandbox restrictions violation, use a different way to create the function.\n"
-                "\t\tif LAST_ATTEMPT assertions fail (ERROR), use a new solution matching the DESCRIPTION.\n"
-                "\t\tdo not use final_answer"
+                "If LAST_ATTEMPT encounters an ERROR due to sandbox restrictions violation, use a different way to create the function.\n"
+                "If LAST_ATTEMPT assertions fail (ERROR), use a new solution matching the DESCRIPTION.\n"
+                "Do not use final_answer.\n"
             )
         else:
             out += (
-                "You have to:\n"
-                "\tCreate the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
+                # "You have to:\n"
+                "Create the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
                 #"\t2: test assertions of the MAIN_OBJECTIVE.\n"
-                "\tRules:\n"
-                "\t\tuse one single snippet.\n"
-                "\t\tfollow the SANDBOX_RULES restrictions.\n"
-                "\t\tdo not use final_answer"
+                "Use one single snippet.\n"
+                "Follow the SANDBOX_RULES restrictions.\n"
+                "Do not use final_answer.\n"
             )
         out += (
             "</INSTRUCTIONS>\n"
