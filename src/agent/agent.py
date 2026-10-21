@@ -128,7 +128,7 @@ print("bye")
                 "retries": 0
             }
         else:
-            if MemoryPrompt.memory_mode:
+            if MemoryPrompt.swe_mode:
                 Log.print(f"step is now: {MemoryPrompt.current_step}")
                 if MemoryPrompt.current_step in ["clean memory", "hypothesis", "rule_on"]:
                     resp = self.llmapi.response(MemoryPrompt.messages, 0.1)
@@ -174,7 +174,7 @@ print("bye")
             self.exec_result = new.sandbox_output
 
         self.set_step_data(new, resp, start)
-        if MemoryPrompt.memory_mode:
+        if MemoryPrompt.swe_mode:
             if MemoryPrompt.current_step == "clean memory":
                 MemoryPrompt.simple_save_missing_info(new.llm_output)
 

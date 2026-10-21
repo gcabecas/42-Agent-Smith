@@ -37,7 +37,7 @@ class MemoryPrompt:
     @classmethod
     def save_data(cls) -> None:
         data = {
-            "memory_mode": cls.memory_mode,
+            "swe_mode": cls.swe_mode,
             "go_next": cls.go_next,
             "base_user": cls.base_user,
             "messages": cls.messages,
@@ -64,8 +64,8 @@ class MemoryPrompt:
         return out
 
     @classmethod
-    def init(cls, base_prompt_system: str, base_prompt_user: str, memory_mode: bool = False) -> None:
-        cls.memory_mode = False
+    def init(cls, base_prompt_system: str, base_prompt_user: str, swe_mode: bool = False) -> None:
+        cls.swe_mode = False
         cls.go_next = False
 
         cls.messages = [{"role": "system", "content": base_prompt_system}]
@@ -73,8 +73,8 @@ class MemoryPrompt:
 
         cls.base_user = base_prompt_user
 
-        if memory_mode:
-            cls.memory_mode = True
+        if swe_mode:
+            cls.swe_mode = True
             cls.hints: list[str] = []
             cls.hypothesis: list[dict[str, str]] = []
             cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
@@ -95,7 +95,7 @@ class MemoryPrompt:
     # Spceial Method usable by the llm
     @classmethod
     def save_missing_info(cls, msg: str) -> None:
-        if not cls.memory_mode:
+        if not cls.swe_mode:
             raise MemoryPromptError("Memory mode not configured")
 
         if msg in cls.hints:
@@ -125,7 +125,7 @@ class MemoryPrompt:
     # Spceial Method usable by the llm
     @classmethod
     def go_next_step(cls) -> None:
-        if not cls.memory_mode:
+        if not cls.swe_mode:
             raise MemoryPromptError("Memory mode not configured")
         if cls.current_step in ["investigate", "test"]:
             raise ValueError("Impossible to use go_next_step in the current phase")
@@ -138,7 +138,7 @@ class MemoryPrompt:
 
     @classmethod
     def simple_go_next_step(cls) -> None:
-        if not cls.memory_mode:
+        if not cls.swe_mode:
             raise MemoryPromptError("Memory mode not configured")
 
         print(f"step set to {cls.next_step[cls.current_step]}")
@@ -294,7 +294,7 @@ class MemoryPrompt:
         
         msg = cls.base_user
         
-        if cls.memory_mode:
+        if cls.swe_mode:
             if not cls.hints and not cls.hypothesis:
                 return msg
 
@@ -332,7 +332,7 @@ class MemoryPrompt:
                 info = previous_sandbox_output
                 if not info.replace("''", "", 1).strip():
                     info = "'[Code executed, but no print occured]'"
-                if cls.memory_mode:
+                if cls.swe_mode:
                     flag = f"{cls.previous_step.upper()}_OUTPUT"
                 else:
                     flag = "OUTPUT"
@@ -345,7 +345,7 @@ class MemoryPrompt:
                 msg = "[The previous message did not execute any code.]"
 
             cls.messages[-2]["content"] = msg
-        if cls.memory_mode:
+        if cls.swe_mode:
             cls.previous_step = cls.current_step
 
     @classmethod
@@ -358,7 +358,7 @@ class MemoryPrompt:
             cls.messages.append({"role": role, "content": msg})
         else:
             cls.messages[-1]["content"] += f"\n{msg}"
-        if cls.memory_mode and role == "assistant":
+        if cls.swe_mode and role == "assistant":
             cls.step_memory.append(msg.strip())
 
     @classmethod

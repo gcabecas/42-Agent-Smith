@@ -67,6 +67,9 @@ def _run_one(code: str, namespace: dict[str, Any],
                     namespace["__builtins__"]["_get_new_prompt_data"]())
 
 
+def no_func() -> None:
+    return None
+
 def _loop(pipe: Connection, config: SandboxConfig,
           output_path: str, tool_names: list[str]) -> None:
     memory_bytes = config.max_memory_mb * 1024 * 1024
@@ -80,12 +83,14 @@ def _loop(pipe: Connection, config: SandboxConfig,
         restricted_open, config.allowed_directories)
     exec_builtins["final_answer"] = final_answer
 
-    exec_builtins["go_next_step"] = MemoryPrompt.go_next_step
-    exec_builtins["save_missing_info"] = MemoryPrompt.save_missing_info
-    exec_builtins["propose_hypothesis"] = MemoryPrompt.propose_hypothesis
-    exec_builtins["rule_on_hypothesis"] = MemoryPrompt.rule_on_hypothesis
-
-    exec_builtins["_get_new_prompt_data"] = MemoryPrompt._get_new_prompt_data
+    if MemoryPrompt.swe_mode:
+        exec_builtins["go_next_step"] = MemoryPrompt.go_next_step
+        exec_builtins["save_missing_info"] = MemoryPrompt.save_missing_info
+        exec_builtins["propose_hypothesis"] = MemoryPrompt.propose_hypothesis
+        exec_builtins["rule_on_hypothesis"] = MemoryPrompt.rule_on_hypothesis
+        exec_builtins["_get_new_prompt_data"] = MemoryPrompt._get_new_prompt_data
+    else:
+        exec_builtins["_get_new_prompt_data"] = no_func
 
     for name in tool_names:
         exec_builtins[name] = partial(_call_tool, name, pipe)
@@ -130,7 +135,8 @@ class Sandbox:
     def run(self, code: str) -> Result:
         self.pipe.send(code)
         status, value, prompt_data = self._wait_for_result()
-        if prompt_data:
+
+        if MemoryPrompt.swe_mode and prompt_data:
             MemoryPrompt.load_data(prompt_data)
 
         with open(self.output_path) as output_file:
