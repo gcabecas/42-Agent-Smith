@@ -65,7 +65,7 @@ class SWEBasePrompts:
             "specialised to resolve SWE bench problems.\n"
             "You need to resolve a problem inside a git repository containing bugged files.\n\n"
 
-            "You have to use only text, every tools are executed in text python code blocks.\n"
+            # "You have to use only text, every tools are executed in text python code blocks.\n"
             "You are in a isolated git repository environment, you have only access to a python sandbox and tools usable inside it to acquire data and take action.\n"
             "Sandbox tools usage is very important, they are python functions usable inside the sandbox, they give you access to the environment you have to debug.\n"
             "It is entirely up to you to resolve the problem inside the git repository environment accessed with mcp-tools,"
@@ -83,9 +83,7 @@ class SWEBasePrompts:
                 "<SPECIAL_TOOL>\n"
                 "For more you have a very important special tool to manage the monitoring:\n"
                 "go_next_step()\n"
-                "save_missing_info(msg: str)\n"
                 "propose_hypothesis(files: list[str], msg: str)\n"
-                "rule_on_hypothesis(verdict: str, evidence: str)\n"
                 "final_answer(git_diff: str)\n"
                 "exemple of use:\n```python\nfinal_answer(exemple_function_to_get_the_git_diff(...))\n```\n"
                 "Here git_diff is the string or print given by the command git diff, use another tool to get it.\n"
@@ -121,23 +119,23 @@ class SWEAgent(Agent):
     def get_instruction_prompt(self) -> str:
 
         out = (
-            "<INSTRUCTIONS>\n"
+            "\n<INSTRUCTIONS>\n"
+            f"Current step is : {MemoryPrompt.current_step.upper()}\n\n"
         )
         if MemoryPrompt.current_step == "investigate":
             out += (
                 "Based on information of : PROBLEM, KNOWN_INFO.\n"
                 "Use SANDBOX_TOOLS to get information to resolve the PROBLEM.\n"
-                "Search where is located the bug(s).\n"
-                "Investigate for missing information.\n"
-                "Get the full problematic node (the full function of even the full file).\n"
+                "Search where and what is the cause of the PROBLEM.\n"
+                # "Find the full problematic node (the full function(s) of even the full file(s)).\n"
                 "Guideline:"
-                "\t[1]: find the problematic file(s).\n"
-                "\t[2]: find the problematic function(s).\n"
-                "\t[3]: find the problematic line(s).\n"
-                "Optimise your tool usage; exemple: If reading, don't read just a few lines; read the entire relevant section.\n"
+                "\tDepending current information. "
+                " Figure out what is the problematic file(s), then the function(s), then the line(s).\n"
+                # "Optimise your tool usage; exemple: If reading, don't read just a few lines; read the entire relevant section.\n"
+                "Investigate for missing information.\n"
                 "Use one only tool and wait for its result.\n"
                 # "You don't have to modifie/add or test, focus on the investigation.\n"
-                "If the information provided indicates the cause of the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n"
+                "If the information provided indicates what is the cause of the PROBLEM, or how to resolve the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n"
             )
             if MemoryPrompt.hypothesis:
                 out += (
@@ -146,67 +144,54 @@ class SWEAgent(Agent):
             out += "\nDo not use the final_answer tool.\n"
         elif MemoryPrompt.current_step == "modifie":
             out += (
-                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
-                "Based on information of : PROBLEM, HYPOTHESIS, INVESTIGATE_OUTPUT and KNOWN_INFO.\n"
+                f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]}\n"
+                 "Based on information of : PROBLEM, HYPOTHESIS, INVESTIGATE_OUTPUT and KNOWN_INFO.\n"
                 "You have to do the minimal changes to fully resolve the PROBLEM.\n"
                 "Modifie files and eventual folders with available SANDBOX_TOOLS.\n"
                 "Use one only tool and wait for its result.\n"
-                # "You don't have to investigate or test now, focus on the modifications.\n"
+                "You don't have to investigate or test now, focus on the modifications.\n"
                 "If the necessary was modified/added to resolve the PROBLEM, use the go_next_step SPECIAL_TOOL.\n"
                 "\nDo not use the final_answer tool.\n"
             )
         elif MemoryPrompt.current_step == "test":
             out += (
-                '<PRIMAL_DIRECTIVE priority="ABSOLUTE">\n'
-                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
-                "</PRIMAL_DIRECTIVE>\n"
-
-                "\n<TEST>\n"
-                f"\nHYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
+                f"\nHYPOTHESIS : {MemoryPrompt.hypothesis[-1]}\n"
                 "Based on information of : MODIFIE_OUTPUT and PROBLEM.\n"
-                "Use SANDBOX_TOOLS to test the results of previous modifications.\n"
-                "Valid or invalid changes made.\n\n"
+                "Use SANDBOX_TOOLS to check and test the results of previous modifications.\n"
+                "After TEST_OUTPUT. If tests are FAILED and the main problems still, use the go_next_step SPECIAL_TOOL.\n"
+                "After TEST_OUTPUT. If all tests pass successfully ([OK]) and the main PROBLEM is resolved, end the process with final_answer SPECIAL_TOOL\n"
                 "Use one only tool and wait for its result.\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n"
             )
-            if MemoryPrompt.hypothesis:
-                out += (
-                    "rule_on_hypothesis need arguments never used in previous HYPOTHESES.\n"
-                )
-            out += "</TEST>\n"
         elif MemoryPrompt.current_step == "clean memory":
             out += (
-                f"\nHypothesis explored: {MemoryPrompt.hypothesis[-1]['hyp']} | {MemoryPrompt.hypothesis[-1]['rule_on']}\n\n"
+                f"\nHypothesis explored: {MemoryPrompt.hypothesis[-1]}\n\n"
                 "Based on information of : INVESTIGATE_OUTPUT, MODIFIE_OUTPUT, TEST_OUTPUT and PROBLEM.\n"
                 "You are writing a memo for your next attempt.\n"
                 "The repository will be reset to its original state. Your current edits are gone.\n"
                 "The next attempt only knows KNOWN_INFO and what you write here. Nothing else.\n"
+                "You need to write a report of this failed process.\n"
                 "\nRules:\n"
                 "- Maximum 25 lines. Be concise.\n"
                 "- NO tool call logs. NO raw tracebacks. NO copied test output.\n"
                 "- Only facts that change the next attempt's decisions.\n"
-                "- Use the exact structure below, with all 5 sections.\n"
-                "\n1) BUG LOCATION\n"
-                "   file:line where the failure originates\n"
-                "   the exact expression/statement that fails at runtime\n"
-                "\n2) ROOT CAUSE\n"
-                "   one sentence describing the runtime sequence that leads to the error\n"
-                "   (do not restate the exception message)\n"
-                "\n3) FIX TO TRY\n"
-                "   the concrete modification, as a small code snippet (<= 6 lines)\n"
-                "   name the file and the function to modify\n"
-                "\n4) DO NOT RETRY (failed approaches)\n"
-                "   bullet list, one line per approach, format:\n"
-                "     - <approach>  ->  <resulting error>\n"
-                "   (only include approaches that actually made the tests fail)\n"
-                "\n5) CLUES IN THE REPO\n"
-                "   comments, docstrings, or existing code lines that point at the intended fix\n"
-                "   include file:line references\n"
-                "</INSTRUCTIONS>"
+                "- Use the exact structure below, with all 3 sections and eventually the bonus.\n"
+                "\n1) SUMMARY\n"
+                "   describe what you thinked and why this process failed\n"
+                "\n2) BUG LOCATION\n"
+                "   files and lines where modifications was made\n"
+                "\n3) CLUES IN THE REPO\n"
+                "   Importants information to resolve the problem from INVESTIGATE_OUTPUT.\n"
+                "   Comments, docstrings, or existing code lines that point at the intended fix.\n"
+                "   Include file and lines references.\n"
+                "\nbonus) ROOT CAUSE\n"
+                "   Only if you think you already know how to fix the PROBLEM,"
+                " you can describe fully how the bug can be fixed the next time, precise files lines and the fix.\n"
+
+                "</INSTRUCTIONS>\n"
             )
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
-                "Based on information of : KNOWN_INFO and INVESTIGATE_OUTPUT.\n"
+                # "Based on information of : KNOWN_INFO and INVESTIGATE_OUTPUT.\n"
                 "Propose a new hypothesis to resolve the PROBLEM.\n"
                 "For this; Execute SPECIAL_TOOL: propose_hypothesis(cls, files: list[str], msg: str)\n"
             )
@@ -214,28 +199,8 @@ class SWEAgent(Agent):
                 out += (
                     "Your hypothesis need to be totally new or precise new important details, do not use already explored HYPOTHESES.\n"
                 )
-        elif MemoryPrompt.current_step == "rule_on":
-            out += (
-                "<RULE_ON_HYPOTHESIS>\n"
-                "Based on OUTPUTS information of : TEST_OUTPUT, MODIFIE_OUTPUT and INVESTIGATE_OUTPUT."
-                "Reassess the following hypothesis and provide a well-supported verdict: "
-                f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"\n'
-                "For this; Execute on only SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
-            )
-            if len(MemoryPrompt.hypothesis) > 1:
-                out += (
-                    "Your verdict/evidence need to be totally new or precise new important details, do not use already explored HYPOTHESES.\n"
-                )
-            out += (
-                "</RULE_ON_HYPOTHESIS>\n"
-
-                "\n<SUCCESS_END>\n"
-                "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
-                "If tests are unsuccessful or FAIL and the main problem is unresolved follow the RULE_ON_HYPOTHESIS rule.\n" 
-                "</SUCCESS_END>\n"
-            )
         else:
-            raise ValueError("impossible current_step at prompt creation")
+            raise ValueError(f"impossible current_step at prompt creation : {MemoryPrompt.current_step}")
         if MemoryPrompt.current_step != "clean memory":
             out += (
                 "</INSTRUCTIONS>\n\n"

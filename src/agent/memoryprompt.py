@@ -77,13 +77,12 @@ class MemoryPrompt:
         if swe_mode:
             cls.swe_mode = True
             cls.hints: list[str] = []
-            cls.hypothesis: list[dict[str, str]] = []
+            cls.hypothesis: list[str] = []
             cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
             cls.step_memory = []
             cls.next_step = {
                             "investigate": "hypothesis", "hypothesis": "modifie",
-                            "modifie": "test", "test": "rule_on",
-                            "rule_on": "clean memory",
+                            "modifie": "test", "test": "clean memory",
                             "clean memory": "reset",
                             "reset": "investigate",
             }
@@ -129,7 +128,7 @@ class MemoryPrompt:
     def go_next_step(cls) -> None:
         if not cls.swe_mode:
             raise MemoryPromptError("Memory mode not configured")
-        if cls.current_step in ["investigate", "test"]:
+        if cls.current_step == "investigate":
             raise ValueError("Impossible to use go_next_step in the current phase")
 
         print(f"step set to {cls.next_step[cls.current_step]}")
@@ -217,7 +216,7 @@ class MemoryPrompt:
 
         if not cls.last_step:
             for elem in cls.hypothesis:
-                if elem["hyp"] == hyp:
+                if elem == hyp:
                     cls.loop_retry += 1
                     print(
                         cls.loop_reaction_msg("propose_hypothesis")
@@ -228,34 +227,8 @@ class MemoryPrompt:
                     return
 
         print("new hypothesis engaged")
-        cls.hypothesis.append({"hyp": hyp, "rule_on": "pending"})
+        cls.hypothesis.append(hyp)
         cls.current_step = "hypothesis"
-        cls.simple_go_next_step()
-        cls.save_data()
-
-    # Spceial Method usable by the llm
-    @classmethod
-    def rule_on_hypothesis(cls, verdict: str, evidence: str) -> None:
-        if cls.current_step not in ["test", "rule_on"]:
-            print("You need to be asked to use this function")
-            return
-
-        rule_on = f"verdict: {verdict} | evidence: {evidence}"
-
-        for elem in cls.hypothesis:
-            if elem.get("rule_on") == rule_on:
-                cls.loop_retry += 1
-                print(
-                    cls.loop_reaction_msg("rule_on_hypothesis")
-                )
-                if cls.current_step == "test":
-                    cls.simple_go_next_step()
-                cls.save_data()
-                return
-
-        print("rule_on_hypothesis saved")
-        cls.hypothesis[-1]["rule_on"] = rule_on
-        cls.current_step = "rule_on"
         cls.simple_go_next_step()
         cls.save_data()
 
@@ -273,7 +246,7 @@ class MemoryPrompt:
                     cls.messages[-1]["content"] = cls.messages[-1]["content"].split("<INSTRUCTIONS>")[0].strip()
                     if not cls.messages[-1]["content"].strip():
                         raise ValueError("impossible cut during check_step_loop")
-                    if cls.current_step not in ["hypothesis", "rule_on"]:
+                    if cls.current_step != "hypothesis":
                         cls.simple_go_next_step()
                     Log.print("duplicate deleted")
                     return True
@@ -305,10 +278,10 @@ class MemoryPrompt:
             for i, elem in enumerate(cls.hints, 1):
                 msg += f"[{i}] {elem}\n"
             if cls.hypothesis:
-                msg += "<HYPOTHESES>\n"
-                for elem in cls.hypothesis:
-                    msg += f"{elem['hyp']} | {elem['rule_on']}"
-                msg += "</HYPOTHESES>\n"
+                msg += "<PREVIOUS_HYPOTHESES>\n"
+                for i, elem in enumerate(cls.hypothesis):
+                    msg += f"[{i}] {elem}\n"
+                msg += "</PREVIOUS_HYPOTHESES>\n"
 
             msg += "</KNOWN_INFO>"
         elif len(cls.tries) > 1:
@@ -361,8 +334,6 @@ class MemoryPrompt:
             cls.messages.append({"role": role, "content": msg})
         else:
             cls.messages[-1]["content"] += f"\n{msg}"
-        if cls.swe_mode and role == "assistant":
-            cls.step_memory.append(msg.strip())
 
     @classmethod
     def get_message_codes(cls) -> list[str]:

@@ -130,12 +130,7 @@ print("bye")
         else:
             if MemoryPrompt.swe_mode:
                 Log.print(f"step is now: {MemoryPrompt.current_step}")
-                if MemoryPrompt.current_step in ["clean memory", "hypothesis", "rule_on"]:
-                    resp = self.llmapi.response(MemoryPrompt.messages, 0.1)
-                else:
-                    resp = self.llmapi.response(MemoryPrompt.messages, 0.1)
-            else:
-                resp = self.llmapi.response(MemoryPrompt.messages)
+            resp = self.llmapi.response(MemoryPrompt.messages)
 
         MemoryPrompt.add_message(resp["llm_output"], "assistant")
         codes = MemoryPrompt.get_message_codes()
@@ -171,6 +166,8 @@ print("bye")
                     self.set_step_data(new, resp, start)
                     self.success = True
                     return False
+                if MemoryPrompt.swe_mode:
+                    MemoryPrompt.step_memory.append(code)
             self.exec_result = new.sandbox_output
 
         self.set_step_data(new, resp, start)
@@ -187,21 +184,21 @@ print("bye")
                 
             #if len(self.steps) >= 28:
             #    MemoryPrompt.last_step = True
-            #if MemoryPrompt.current_step == "investigate":
-            #    if len(self.steps) <= 15:
-            #        if len(MemoryPrompt.step_memory) >= 10:
-            #            MemoryPrompt.simple_go_next_step()
-            #    elif len(self.steps) <= 23:
-            #        if len(MemoryPrompt.step_memory) >= 9:
-            #            MemoryPrompt.simple_go_next_step()
-            #    elif len(self.steps) == 28:
-            #        MemoryPrompt.simple_go_next_step()
-            #    else:
-            #        if len(MemoryPrompt.step_memory) >= 3:
-            #            MemoryPrompt.simple_go_next_step()
+            if MemoryPrompt.current_step == "investigate":
+                if len(self.steps) <= 15:
+                    if len(MemoryPrompt.step_memory) >= 10:
+                        MemoryPrompt.simple_go_next_step()
+                elif len(self.steps) <= 23:
+                    if len(MemoryPrompt.step_memory) >= 9:
+                        MemoryPrompt.simple_go_next_step()
+                elif len(self.steps) == 28:
+                    MemoryPrompt.simple_go_next_step()
+                else:
+                    if len(MemoryPrompt.step_memory) >= 3:
+                        MemoryPrompt.simple_go_next_step()
 
             MemoryPrompt.apply_go_next_step(self.testbed)
-            prompt = self.create_prompt("SANDBOX_OUTPUT")
+            prompt = self.create_prompt(f"{MemoryPrompt.previous_step.upper()}_OUTPUT")
             MemoryPrompt.add_message(prompt)
         else:
             MemoryPrompt.save_try(new.sandbox_output)
