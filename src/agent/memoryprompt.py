@@ -47,7 +47,8 @@ class MemoryPrompt:
             "step_memory": cls.step_memory,
             "current_step": cls.current_step,
             "previous_step": cls.previous_step,
-            "loop_retry": cls.loop_retry
+            "loop_retry": cls.loop_retry,
+            "last_step": cls.last_step
         }
         cls._new_data = data
 
@@ -89,6 +90,7 @@ class MemoryPrompt:
             cls.current_step = "investigate"
             cls.previous_step = "investigate"
             cls.loop_retry = 0
+            cls.last_step = False
         else:
             cls.tries = []
 
@@ -213,16 +215,17 @@ class MemoryPrompt:
 
         hyp = f"{msg} | [{', '.join(files)}]"
 
-        for elem in cls.hypothesis:
-            if elem["hyp"] == hyp:
-                cls.loop_retry += 1
-                print(
-                    cls.loop_reaction_msg("propose_hypothesis")
-                )
-                if cls.current_step == "investigate":
-                    cls.simple_go_next_step()
-                cls.save_data()
-                return
+        if not cls.last_step:
+            for elem in cls.hypothesis:
+                if elem["hyp"] == hyp:
+                    cls.loop_retry += 1
+                    print(
+                        cls.loop_reaction_msg("propose_hypothesis")
+                    )
+                    if cls.current_step == "investigate":
+                        cls.simple_go_next_step()
+                    cls.save_data()
+                    return
 
         print("new hypothesis engaged")
         cls.hypothesis.append({"hyp": hyp, "rule_on": "pending"})

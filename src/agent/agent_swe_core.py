@@ -95,7 +95,7 @@ class SWEBasePrompts:
         )
         user_prompt = (
             "<MAIN_OBJECTIVE>\n"
-            "You need to resolve the following problem statement:\n"
+            "The following problem statement need to be resolved:\n"
             f"<PROBLEM>\n{problem_statement}</PROBLEM>\n"
         )
         if hints_text:
@@ -126,11 +126,12 @@ class SWEAgent(Agent):
         if MemoryPrompt.current_step == "investigate":
             out += (
                 "Based on information of : PROBLEM, KNOWN_INFO and INVESTIGATE_OUTPUT.\n"
-                "Execute SANDBOX_TOOLS to investigate.\n"
-                "Use only tools to get information.\n"
-                "Figure out where is located the bug(s).\n"
+                "Use SANDBOX_TOOLS  to get information permitting to resolve the PROBLEM.\n"
+                "Investigate for missing information.\n"
+                "Search where is located the bug(s).\n"
                 "Optimise your tool usage; exemple: if reading, read a whole block no few lines.\n"
-                "You don't have to modifie/add or test, focus on the investigation.\n"
+                "Use one only tool and wait for its result.\n"
+                # "You don't have to modifie/add or test, focus on the investigation.\n"
                 "If the information provided indicates the cause of the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n"
             )
             if MemoryPrompt.hypothesis:
@@ -143,9 +144,10 @@ class SWEAgent(Agent):
                 f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Based on information of : HYPOTHESIS, INVESTIGATE_OUTPUT and KNOWN_INFO.\n"
                 "Modifie files and eventual folders with available SANDBOX_TOOLS.\n"
-                "Resolve the files or eventual folders PROBLEM.\n"
-                "You don't have to investigate or test now, focus on the modifications.\n"
-                "If all the necessary was modified/added, use the go_next_step SPECIAL_TOOL.\n"
+                "You have to do the minimal changes to fully resolve the PROBLEM.\n"
+                "Use one only tool and wait for its result.\n"
+                # "You don't have to investigate or test now, focus on the modifications.\n"
+                "If the necessary was modified/added permitting to resolve the PROBLEM, use the go_next_step SPECIAL_TOOL.\n"
                 "\nDo not use the final_answer tool.\n"
             )
         elif MemoryPrompt.current_step == "test":
@@ -154,12 +156,12 @@ class SWEAgent(Agent):
                 "If all tests pass successfully ([OK]) and the main problem is resolved, end the process with final_answer SPECIAL_TOOL\n"
                 "</PRIMAL_DIRECTIVE>\n"
 
-                "<TEST>\n"
+                "\n<TEST>\n"
                 f"\nHYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
-                "Execute SANDBOX_TOOLS to test !\n"
                 "Based on information of : MODIFIE_OUTPUT and PROBLEM.\n"
-                "Use tools to test the results of previous modifications.\n"
+                "Use SANDBOX_TOOLS to test the results of previous modifications.\n"
                 "Valid or invalid changes made.\n\n"
+                "Use one only tool and wait for its result.\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n"
             )
             if MemoryPrompt.hypothesis:
@@ -205,7 +207,7 @@ class SWEAgent(Agent):
             )
             if MemoryPrompt.hypothesis:
                 out += (
-                    "Your hypothesis need to be very new, do not use already explored HYPOTHESES.\n"
+                    "Your hypothesis need to be totally new or precise new important details, do not use already explored HYPOTHESES.\n"
                 )
         elif MemoryPrompt.current_step == "rule_on":
             out += (
@@ -213,11 +215,11 @@ class SWEAgent(Agent):
                 "Based on OUTPUTS information of : TEST_OUTPUT, MODIFIE_OUTPUT and INVESTIGATE_OUTPUT."
                 "Reassess the following hypothesis and provide a well-supported verdict: "
                 f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"\n'
-                "For this; Execute SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
+                "For this; Execute on only SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
             )
             if len(MemoryPrompt.hypothesis) > 1:
                 out += (
-                    "The agument 'evidence' must be different from previous HYPOTHESES evidences.\n"
+                    "Your verdict/evidence need to be totally new or precise new important details, do not use already explored HYPOTHESES.\n"
                 )
             out += (
                 "</RULE_ON_HYPOTHESIS>\n"
@@ -231,9 +233,8 @@ class SWEAgent(Agent):
             raise ValueError("impossible current_step at prompt creation")
         if MemoryPrompt.current_step != "clean memory":
             out += (
-                "\nUse one only tool and wait for its result.\n"
                 "</INSTRUCTIONS>\n\n"
-                "Think a little to comply with INSTRUCTIONS, then give a single python code snippet:\n"
+                "Think briefly to comply with INSTRUCTIONS, then give a single python code snippet:\n"
                 "exemple:\n"
                 "<thoughts>\n"
                 "```python\n<code>\n```>"
