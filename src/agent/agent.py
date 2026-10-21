@@ -192,6 +192,8 @@ print("bye")
                 elif len(self.steps) <= 23:
                     if len(MemoryPrompt.step_memory) >= 9:
                         MemoryPrompt.simple_go_next_step()
+                elif len(self.steps) == 29:
+                    MemoryPrompt.simple_go_next_step()
                 else:
                     if len(MemoryPrompt.step_memory) >= 3:
                         MemoryPrompt.simple_go_next_step()

@@ -68,7 +68,8 @@ class SWEBasePrompts:
             "You have to use only text, every tools are executed in text python code blocks.\n"
             "You are in a isolated git repository environment, you have only access to a python sandbox and tools usable inside it to acquire data and take action.\n"
             "Sandbox tools usage is very important, they are python functions usable inside the sandbox, they give you access to the environment you have to debug.\n"
-            "It is entirely up to you to resolve the problem. You have to modifie directly files.\n"
+            "It is entirely up to you to resolve the problem inside the git repository environment accessed with mcp-tools,"
+            " including applie modifications (with available python tools).\n"
             "You are in a fully automated pipeline, all the pyhton code you give is used in the sandbox and the output is returned to you,"
             " if the code not work in the sandbox, think of trying differents possibilities.\n"
             "The sandbox is just a small lab not a part of the bugged environment and not a part of problem to resolve.\n"
@@ -96,8 +97,6 @@ class SWEBasePrompts:
             "<MAIN_OBJECTIVE>\n"
             "You need to resolve the following problem statement:\n"
             f"<PROBLEM>\n{problem_statement}</PROBLEM>\n"
-            "It is entirely up to you to resolve the problem inside the git repository environment accessed with mcp-tools,"
-            " including applie modifications (with available python tools).\n"
         )
         if hints_text:
             user_prompt += f"<MAIN_OBJECTIVE_HINT>\n{hints_text}\n</MAIN_OBJECTIVE_HINT>\n"
@@ -122,32 +121,32 @@ class SWEAgent(Agent):
     def get_instruction_prompt(self) -> str:
 
         out = (
-            "<INSTRUCTIONS>\n\n"
+            "<INSTRUCTIONS>\n"
         )
         if MemoryPrompt.current_step == "investigate":
             out += (
-                "<INVESTIGATE>\n"
                 "Based on information of : PROBLEM, KNOWN_INFO and INVESTIGATE_OUTPUT.\n"
                 "Execute SANDBOX_TOOLS to investigate.\n"
-                "Figure out where is located the bug exactly. Changements will be made only later.\n"
                 "Use only tools to get information.\n"
+                "Figure out where is located the bug(s).\n"
                 "Optimise your tool usage; exemple: if reading, read a whole block no few lines.\n"
-                "You don't have to modifie now, focus on the investigation.\n"
-                "If the information provided indicates the cause of the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n\n"
-                "Do not use the final_answer tool.\n"
-                "</INVESTIGATE>\n"
+                "You don't have to modifie/add or test, focus on the investigation.\n"
+                "If the information provided indicates the cause of the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n"
             )
+            if MemoryPrompt.hypothesis:
+                out += (
+                    "propose_hypothesis need arguments never used in previous HYPOTHESES.\n"
+                )
+            out += "\nDo not use the final_answer tool.\n"
         elif MemoryPrompt.current_step == "modifie":
             out += (
-                "<MODIFIE>\n"
                 f"HYPOTHESIS : {MemoryPrompt.hypothesis[-1]['hyp']}\n"
                 "Based on information of : HYPOTHESIS, INVESTIGATE_OUTPUT and KNOWN_INFO.\n"
-                "Execute SANDBOX_TOOLS to modifie/add.\n"
-                "Resolve the PROBLEM.\n"
-                "Modifie files and eventual folder with available tools.\n"
-                "Focus on the modifications only; or if all the necessary was modified/added, use the go_next_step SPECIAL_TOOL.\n\n"
-                "Do not use the final_answer tool.\n"
-                "</MODIFIE>\n"
+                "Modifie files and eventual folders with available SANDBOX_TOOLS.\n"
+                "Resolve the files or eventual folders PROBLEM.\n"
+                "You don't have to investigate or test now, focus on the modifications.\n"
+                "If all the necessary was modified/added, use the go_next_step SPECIAL_TOOL.\n"
+                "\nDo not use the final_answer tool.\n"
             )
         elif MemoryPrompt.current_step == "test":
             out += (
@@ -162,11 +161,14 @@ class SWEAgent(Agent):
                 "Use tools to test the results of previous modifications.\n"
                 "Valid or invalid changes made.\n\n"
                 "If tests are unsuccessful or FAIL and the main problem is unresolved use the rule_on_hypothesis SPECIAL_TOOL.\n"
-                "</CONTINUE>\n"
             )
+            if MemoryPrompt.hypothesis:
+                out += (
+                    "rule_on_hypothesis need arguments never used in previous HYPOTHESES.\n"
+                )
+            out += "</TEST>\n"
         elif MemoryPrompt.current_step == "clean memory":
             out += (
-                "<SAVE>\n"
                 f"\nHypothesis explored: {MemoryPrompt.hypothesis[-1]['hyp']} | {MemoryPrompt.hypothesis[-1]['rule_on']}\n\n"
                 "Based on information of : INVESTIGATE_OUTPUT, MODIFIE_OUTPUT, TEST_OUTPUT and PROBLEM.\n"
                 "You are writing a memo for your next attempt.\n"
@@ -193,25 +195,31 @@ class SWEAgent(Agent):
                 "\n5) CLUES IN THE REPO\n"
                 "   comments, docstrings, or existing code lines that point at the intended fix\n"
                 "   include file:line references\n"
-                "</SAVE>\n"
                 "</INSTRUCTIONS>"
             )
         elif MemoryPrompt.current_step == "hypothesis":
             out += (
-                "<PROPOSE_HYPOTHESIS>\n"
-                "Based on information of : KNOWN_INFO and INVESTIGATE.\n"
+                "Based on information of : KNOWN_INFO and INVESTIGATE_OUTPUT.\n"
                 "Propose a new hypothesis to resolve the PROBLEM.\n"
                 "For this; Execute SPECIAL_TOOL: propose_hypothesis(cls, files: list[str], msg: str)\n"
-                "</PROPOSE_HYPOTHESIS>\n"
             )
+            if MemoryPrompt.hypothesis:
+                out += (
+                    "Your hypothesis need to be very new, do not use already explored HYPOTHESES.\n"
+                )
         elif MemoryPrompt.current_step == "rule_on":
             out += (
                 "<RULE_ON_HYPOTHESIS>\n"
-                "Based on information of : TEST, MODIFIE, INVESTIGATE."
+                "Based on OUTPUTS information of : TEST_OUTPUT, MODIFIE_OUTPUT and INVESTIGATE_OUTPUT."
                 "Reassess the following hypothesis and provide a well-supported verdict: "
                 f'"{MemoryPrompt.hypothesis[-1]["hyp"]}"\n'
                 "For this; Execute SPECIAL_TOOL: rule_on_hypothesis(cls, verdict: str, evidence: str)\n"
-                "The agument 'evidence' must be different from previous HYPOTHESES evidences.\n"
+            )
+            if len(MemoryPrompt.hypothesis) > 1:
+                out += (
+                    "The agument 'evidence' must be different from previous HYPOTHESES evidences.\n"
+                )
+            out += (
                 "</RULE_ON_HYPOTHESIS>\n"
 
                 "\n<SUCCESS_END>\n"
@@ -224,20 +232,18 @@ class SWEAgent(Agent):
         if MemoryPrompt.current_step != "clean memory":
             out += (
                 "\nUse one only tool and wait for its result.\n"
-                "<OUTPUT_FORMAT>\n"
-                "Think briefly to comply with INSTRUCTIONS, then give a single python code snippet:\n"
+                "</INSTRUCTIONS>\n\n"
+                "Think a little to comply with INSTRUCTIONS, then give a single python code snippet:\n"
+                "exemple:\n"
                 "<thoughts>\n"
-                "```python\n<code>\n```>\n"
-                "</OUTPUT_FORMAT>\n"
-                "</INSTRUCTIONS>\n"
-                "Follow instructions."
+                "```python\n<code>\n```>"
             )
 
         return out
 
     def sandbox_term(self, code: str) -> tuple[str, str]:
 
-        sandbox = Sandbox(self.sandbox_config)
+        sandbox = Sandbox(self.sandbox_config, tools=self.mcp_tools)
         try:
             status, value, output = sandbox.run(code + "\n")
             match status:

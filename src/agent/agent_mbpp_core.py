@@ -84,24 +84,9 @@ class MBPPAgent(Agent):
 
     def get_instruction_prompt(self) -> None:
 
-        if self.state == "final_answer" or not MemoryPrompt.tries:
-            out = (
-                "<INSTRUCTIONS>\n"
-                "<OUTPUT_FORMAT>\n"
-                "Think briefly to comply with INSTRUCTIONS, then give a single python code snippet:\n"
-                "<thoughts>\n"
-                "```python\n<code>\n```>\n"
-                "</OUTPUT_FORMAT>\n\n"
-            )
-        else:
-            out = (
-                "<INSTRUCTIONS>\n"
-                "<OUTPUT_FORMAT>\n"
-                "Think briefly why LAST_ATTEMPT failed and how to succeed this time by following INSTRUCTIONS. Then give a single python code snippet:\n"
-                "<thoughts>\n"
-                "```python\n<code>\n```>\n"
-                "</OUTPUT_FORMAT>\n\n"
-            )
+        out = (
+            "<INSTRUCTIONS>\n"
+        )
         if self.state == "final_answer":
             out += (
                 "ALL ASSERTS PASSED !\n"
@@ -118,17 +103,14 @@ class MBPPAgent(Agent):
                 "Create the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
                 "Use one single snippet.\n"
                 "Follow the SANDBOX_RULES restrictions.\n"
-                f"ERROR occurred in LAST_ATTEMPT, propose a different function from {msg_attempts}.\n"
-                #"\t2: test assertions of the MAIN_OBJECTIVE.\n"
+                f"An ERROR occurred in LAST_ATTEMPT; figure out what failed and propose a different function from {msg_attempts}.\n"
                 "If LAST_ATTEMPT encounters an ERROR due to sandbox restrictions violation, use a different way to create the function.\n"
                 "If LAST_ATTEMPT assertions fail (ERROR), use a new solution matching the DESCRIPTION.\n"
                 "Do not use final_answer.\n"
             )
         else:
             out += (
-                # "You have to:\n"
                 "Create the function of the MAIN_OBJECTIVE, matching its DESCRIPTION.\n"
-                #"\t2: test assertions of the MAIN_OBJECTIVE.\n"
                 "Use one single snippet.\n"
                 "Follow the SANDBOX_RULES restrictions.\n"
                 "Do not use final_answer.\n"
@@ -136,11 +118,15 @@ class MBPPAgent(Agent):
         out += (
             "</INSTRUCTIONS>\n"
         )
+        if self.state == "final_answer" or not MemoryPrompt.tries:
+            out += "Think a little to comply with INSTRUCTIONS, then give a single python code snippet.\n"
+        else:
+
+            out += "Think a little about why LAST_ATTEMPT failed and how to succeed this time by following INSTRUCTIONS. Then give a single python code snippet.\n"
         out += (
-            "Follow INSTRUCTIONS, and use OUTPUT_FORMAT"
-            # "Think briefly about INSTRUCTIONS, then give a single python code snippet:\n"
-            #  "<thoughts>\n"
-             # "```python\n<code>\n```>\n"
+            "exemple:\n"
+            "<thoughts>\n"
+            "```python\n<code>\n```>"
         )
         return out
 
