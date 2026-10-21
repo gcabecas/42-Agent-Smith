@@ -185,20 +185,20 @@ print("bye")
                 MemoryPrompt.compress_user_msg(self.previous_sandbox_output, self.executed)
                 self.previous_sandbox_output = new.sandbox_output
                 
-            if len(self.steps) >= 28:
-                MemoryPrompt.last_step = True
-            if MemoryPrompt.current_step == "investigate":
-                if len(self.steps) <= 15:
-                    if len(MemoryPrompt.step_memory) >= 10:
-                        MemoryPrompt.simple_go_next_step()
-                elif len(self.steps) <= 23:
-                    if len(MemoryPrompt.step_memory) >= 9:
-                        MemoryPrompt.simple_go_next_step()
-                elif len(self.steps) == 28:
-                    MemoryPrompt.simple_go_next_step()
-                else:
-                    if len(MemoryPrompt.step_memory) >= 3:
-                        MemoryPrompt.simple_go_next_step()
+            #if len(self.steps) >= 28:
+            #    MemoryPrompt.last_step = True
+            #if MemoryPrompt.current_step == "investigate":
+            #    if len(self.steps) <= 15:
+            #        if len(MemoryPrompt.step_memory) >= 10:
+            #            MemoryPrompt.simple_go_next_step()
+            #    elif len(self.steps) <= 23:
+            #        if len(MemoryPrompt.step_memory) >= 9:
+            #            MemoryPrompt.simple_go_next_step()
+            #    elif len(self.steps) == 28:
+            #        MemoryPrompt.simple_go_next_step()
+            #    else:
+            #        if len(MemoryPrompt.step_memory) >= 3:
+            #            MemoryPrompt.simple_go_next_step()
 
             MemoryPrompt.apply_go_next_step(self.testbed)
             prompt = self.create_prompt("SANDBOX_OUTPUT")

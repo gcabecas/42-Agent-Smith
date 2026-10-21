@@ -126,14 +126,15 @@ class SWEAgent(Agent):
         if MemoryPrompt.current_step == "investigate":
             out += (
                 "Based on information of : PROBLEM, KNOWN_INFO.\n"
-                "Use SANDBOX_TOOLS  to get information permitting to resolve the PROBLEM.\n"
-                "Investigate for missing information.\n"
+                "Use SANDBOX_TOOLS to get information to resolve the PROBLEM.\n"
                 "Search where is located the bug(s).\n"
+                "Investigate for missing information.\n"
                 "Get the full problematic node (the full function of even the full file).\n"
-                "[1]: find the problematic files.\n"
-                "[2]: find the problematic functions.\n"
-                "[3]: find the problematic lines.\n"
-                "Optimise your tool usage; exemple: if reading, don't read few lines.\n"
+                "Guideline:"
+                "\t[1]: find the problematic file(s).\n"
+                "\t[2]: find the problematic function(s).\n"
+                "\t[3]: find the problematic line(s).\n"
+                "Optimise your tool usage; exemple: If reading, don't read just a few lines; read the entire relevant section.\n"
                 "Use one only tool and wait for its result.\n"
                 # "You don't have to modifie/add or test, focus on the investigation.\n"
                 "If the information provided indicates the cause of the PROBLEM, use the propose_hypothesis SPECIAL_TOOL.\n"
@@ -151,7 +152,7 @@ class SWEAgent(Agent):
                 "Modifie files and eventual folders with available SANDBOX_TOOLS.\n"
                 "Use one only tool and wait for its result.\n"
                 # "You don't have to investigate or test now, focus on the modifications.\n"
-                "If the necessary was modified/added permitting to resolve the PROBLEM, use the go_next_step SPECIAL_TOOL.\n"
+                "If the necessary was modified/added to resolve the PROBLEM, use the go_next_step SPECIAL_TOOL.\n"
                 "\nDo not use the final_answer tool.\n"
             )
         elif MemoryPrompt.current_step == "test":
