@@ -20,8 +20,9 @@ from src.agent.memoryprompt import MemoryPrompt
 MAX_OUTPUT_CHARS = 10_000
 
 
-def _call_tool(name: str, pipe: Connection, /,
-               *args: Any, **kwargs: Any) -> Any:
+def _call_tool(
+    name: str, pipe: Connection, /, *args: Any, **kwargs: Any
+) -> Any:
     pipe.send(("tool_call", (name, args, kwargs)))
     ok, payload = pipe.recv()
     if not ok:
@@ -46,8 +47,9 @@ def _compile(code: str) -> Any:
         return compile(code, "<sandbox>", "exec")
 
 
-def _run_one(code: str, namespace: dict[str, Any],
-             output_path: str) -> tuple[str, str | None]:
+def _run_one(
+    code: str, namespace: dict[str, Any], output_path: str
+) -> tuple[str, str | None]:
     with (
         open(output_path, "w", buffering=1) as output_file,
         redirect_stdout(output_file),
@@ -55,39 +57,58 @@ def _run_one(code: str, namespace: dict[str, Any],
     ):
         try:
             exec(_compile(code), namespace)
-            return ("ok", None, namespace["__builtins__"]["_get_new_prompt_data"]())
+            return (
+                "ok",
+                None,
+                namespace["__builtins__"]["_get_new_prompt_data"](),
+            )
         except FinalAnswer as e:
-            return ("final_answer", e.value, namespace["__builtins__"]["_get_new_prompt_data"]())
+            return (
+                "final_answer",
+                e.value,
+                namespace["__builtins__"]["_get_new_prompt_data"](),
+            )
         except Exception as e:
             name = type(e).__name__
             message = f"{name}: {e}" if str(e) else name
             line = _error_line(e)
-            return ("error",
-                    f"{message} (line {line})" if line else message,
-                    namespace["__builtins__"]["_get_new_prompt_data"]())
+            return (
+                "error",
+                f"{message} (line {line})" if line else message,
+                namespace["__builtins__"]["_get_new_prompt_data"](),
+            )
 
 
 def no_func() -> None:
     return None
 
-def _loop(pipe: Connection, config: SandboxConfig,
-          output_path: str, tool_names: list[str]) -> None:
+
+def _loop(
+    pipe: Connection,
+    config: SandboxConfig,
+    output_path: str,
+    tool_names: list[str],
+) -> None:
     memory_bytes = config.max_memory_mb * 1024 * 1024
     resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
     block_network()
 
     exec_builtins = dict(SAFE_BUILTINS)
     exec_builtins["__import__"] = partial(
-        restricted_import, config.authorized_imports)
+        restricted_import, config.authorized_imports
+    )
     exec_builtins["open"] = partial(
-        restricted_open, config.allowed_directories)
+        restricted_open, config.allowed_directories
+    )
     exec_builtins["final_answer"] = final_answer
 
     if MemoryPrompt.swe_mode:
         exec_builtins["go_next_step"] = MemoryPrompt.go_next_step
         exec_builtins["save_missing_info"] = MemoryPrompt.save_missing_info
         exec_builtins["propose_hypothesis"] = MemoryPrompt.propose_hypothesis
-        exec_builtins["_get_new_prompt_data"] = MemoryPrompt._get_new_prompt_data
+        exec_builtins["_get_new_prompt_data"] = (
+            MemoryPrompt._get_new_prompt_data
+        )
     else:
         exec_builtins["_get_new_prompt_data"] = no_func
 
@@ -117,7 +138,8 @@ class Sandbox:
         self.tools = tools or {}
 
         output_fd, self.output_path = tempfile.mkstemp(
-            prefix="sandbox_output_")
+            prefix="sandbox_output_"
+        )
         os.close(output_fd)
 
         self._start()
@@ -126,8 +148,7 @@ class Sandbox:
         self.pipe, child_pipe = multiprocessing.Pipe()
         self.process = multiprocessing.Process(
             target=_loop,
-            args=(child_pipe, self.config, self.output_path,
-                  list(self.tools)),
+            args=(child_pipe, self.config, self.output_path, list(self.tools)),
         )
         self.process.start()
 
@@ -141,8 +162,10 @@ class Sandbox:
         with open(self.output_path) as output_file:
             output = output_file.read(MAX_OUTPUT_CHARS + 1)
         if len(output) > MAX_OUTPUT_CHARS:
-            output = (output[:MAX_OUTPUT_CHARS]
-                      + f"\n[output truncated to {MAX_OUTPUT_CHARS} chars]\n")
+            output = (
+                output[:MAX_OUTPUT_CHARS]
+                + f"\n[output truncated to {MAX_OUTPUT_CHARS} chars]\n"
+            )
         return Result(status, value, output)
 
     def _wait_for_result(self) -> tuple[str, str | None, dict[str, Any]]:
@@ -153,15 +176,18 @@ class Sandbox:
         while True:
             started = time.monotonic()
             ready = multiprocessing.connection.wait(
-                [self.pipe, sentinel], timeout=remaining)
+                [self.pipe, sentinel], timeout=remaining
+            )
             remaining -= time.monotonic() - started
 
             if sentinel in ready:
                 self._restart()
-                return ("interrupted",
-                        "sandbox process terminated (KeyboardInterrupt "
-                        "or SystemExit), sandbox restarted, namespace reset",
-                        dict())
+                return (
+                    "interrupted",
+                    "sandbox process terminated (KeyboardInterrupt "
+                    "or SystemExit), sandbox restarted, namespace reset",
+                    dict(),
+                )
             elif self.pipe in ready:
                 message = self.pipe.recv()
                 if message[0] != "tool_call":
@@ -170,13 +196,16 @@ class Sandbox:
                 self.pipe.send(self._invoke_tool(name, args, kwargs))
             else:
                 self._restart()
-                return ("timeout",
-                        f"execution timed out after {timeout}s, output may "
-                        "be partial, sandbox restarted, namespace reset",
-                        dict())
+                return (
+                    "timeout",
+                    f"execution timed out after {timeout}s, output may "
+                    "be partial, sandbox restarted, namespace reset",
+                    dict(),
+                )
 
-    def _invoke_tool(self, name: str, args: tuple[Any, ...],
-                     kwargs: dict[str, Any]) -> tuple[bool, Any]:
+    def _invoke_tool(
+        self, name: str, args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> tuple[bool, Any]:
         try:
             return (True, self.tools[name](*args, **kwargs))
         except Exception as e:

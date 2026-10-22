@@ -16,13 +16,15 @@ def _server(command: str | None, url: str | None) -> Any:
     if url:
         return url
     program, *args = shlex.split(command or "")
-    return StdioServerParameters(command=program, args=args,
-                                 env=dict(os.environ))
+    return StdioServerParameters(
+        command=program, args=args, env=dict(os.environ)
+    )
 
 
 class McpClient:
-    def __init__(self, command: str | None = None,
-                 url: str | None = None) -> None:
+    def __init__(
+        self, command: str | None = None, url: str | None = None
+    ) -> None:
         self.server = _server(command, url)
         self.specs = self._run(lambda client: client.list_tools()).tools
         self.resources = self._list("resources")
@@ -49,6 +51,7 @@ class McpClient:
         async def connected() -> Any:
             async with Client(self.server) as client:
                 return await action(client)
+
         try:
             return asyncio.run(connected())
         except BaseException as e:
@@ -60,11 +63,15 @@ class McpClient:
 
     def get_prompt(self, name: str, /, **arguments: str) -> str:
         result = self._run(lambda client: client.get_prompt(name, arguments))
-        return "\n".join(m.content.text for m in result.messages
-                         if hasattr(m.content, "text"))
+        return "\n".join(
+            m.content.text
+            for m in result.messages
+            if hasattr(m.content, "text")
+        )
 
-    def call(self, name: str, params: list[str], /,
-             *args: Any, **kwargs: Any) -> str:
+    def call(
+        self, name: str, params: list[str], /, *args: Any, **kwargs: Any
+    ) -> str:
         arguments = dict(zip(params, args)) | kwargs
         result = self._run(lambda client: client.call_tool(name, arguments))
         text = "\n".join(c.text for c in result.content if hasattr(c, "text"))

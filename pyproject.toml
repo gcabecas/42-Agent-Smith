@@ -5,10 +5,7 @@ description = "This is a project where you build an autonomous AI agent capable 
 requires-python = "==3.10.*"
 dependencies = [
     "docker>=7.0.0",
-    "types-docker",
     "pydantic",
-    "flake8>=7.0",
-    "mypy>=1.0",
     "mcp>=2.2.0",
     "flask",
     "gunicorn",
@@ -17,13 +14,22 @@ dependencies = [
     "tree-sitter-language-pack",
     "GitPython",
     "jedi",
-	"OpenAI",
-	"Fire",
-	"dotenv",
-	"pexpect"
+    "openai",
+    "fire",
+    "python-dotenv",
+    "pexpect",
+]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.0",
+    "mypy>=1.0",
+    "types-docker",
 ]
 
 [project.scripts]
+agent_mbpp = "src.agent.cli:mbpp"
+agent_swebench = "src.agent.cli:swebench"
 sandbox = "src.sandbox.cli:main"
 
 [build-system]

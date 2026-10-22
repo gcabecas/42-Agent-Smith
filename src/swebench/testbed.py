@@ -67,10 +67,12 @@ class DockerTestbed:
             raise
         self._previous_handler = signal.signal(signal.SIGTERM, self._terminate)
 
-    def exec(self, command: list[str],
-             workdir: str | None = None) -> tuple[int, str]:
+    def exec(
+        self, command: list[str], workdir: str | None = None
+    ) -> tuple[int, str]:
         result = self.container.exec_run(
-            command, workdir=workdir or self.workdir)
+            command, workdir=workdir or self.workdir
+        )
         output = result.output
         if isinstance(output, bytes):
             output = output.decode("utf-8", errors="replace")
@@ -92,8 +94,11 @@ class DockerTestbed:
 
     def write_eval_script(self, script: str) -> None:
         path = Path(self.eval_path)
-        payload = script.replace("\r", "").replace(
-            "set -uxo pipefail", "set -uo pipefail").encode()
+        payload = (
+            script.replace("\r", "")
+            .replace("set -uxo pipefail", "set -uo pipefail")
+            .encode()
+        )
         entry = tarfile.TarInfo(name=path.name)
         entry.size = len(payload)
         entry.mode = 0o755
@@ -140,17 +145,26 @@ class DockerTestbed:
         self.install()
 
     def mcp_command(self) -> str:
-        return " ".join(shlex.quote(part) for part in [
-            "docker", "exec", "-i",
-            "-w", self.server_dir,
-            "-e", f"TESTBED_PATH={self.workdir}",
-            "-e", f"EVAL_SCRIPT={self.eval_path}",
-            self.container.id,
-            self.python, "mcp_tools_swebench.py",
-        ])
+        return " ".join(
+            shlex.quote(part)
+            for part in [
+                "docker",
+                "exec",
+                "-i",
+                "-w",
+                self.server_dir,
+                "-e",
+                f"TESTBED_PATH={self.workdir}",
+                "-e",
+                f"EVAL_SCRIPT={self.eval_path}",
+                self.container.id,
+                self.python,
+                "mcp_tools_swebench.py",
+            ]
+        )
 
     def reset_data(self, ref: str = "HEAD") -> None:
-        """ Return the deposit to `ref` state, without recreating the container. """
+        """Reset the repository to ref without recreating the container."""
         if self.container is None:
             raise RuntimeError("Docker testbed is not started")
 

@@ -1,18 +1,11 @@
-
 from pydantic import BaseModel, Field
-import sys
 from typing import Any, Optional
 from datetime import datetime
 
-from src.sandbox.execute import Sandbox
 from src.common.models import SandboxConfig
 from src.agent.stepmetrics import StepMetrics
 from src.agent.memoryprompt import MemoryPrompt
 from src.agent.helpers import Log, LlmApi
-
-
-NDEBUG = 0  # TODO debug variable
-
 
 
 class SolutionOutput(BaseModel):
@@ -21,34 +14,53 @@ class SolutionOutput(BaseModel):
     json.
     The moulinette validates this against task correctness and metrics limits.
     """
+
     task_id: str = Field(
-        description="Task identifier (MBPP task_id a string, or SWE-bench instance_id)")
+        description="Task identifier (MBPP task_id a string, or SWE-bench instance_id)"
+    )
     benchmark: str = Field(description="Benchmark type: 'mbpp' or  swebench'")
 
     success: bool = Field(
-        default=False, description="Whether the agent believes i solved the task")
+        default=False,
+        description="Whether the agent believes i solved the task",
+    )
     solution: str = Field(
-        default="", description="For MBPP: the Python function code For SWE-bench: the git patch (diff)")
+        default="",
+        description="For MBPP: the Python function code For SWE-bench: the git patch (diff)",
+    )
     iterations: int = Field(
-        default=0, description="Number of agent loop iteration used")
+        default=0, description="Number of agent loop iteration used"
+    )
     total_requests: int = Field(
-        default=0, description="Total number of LLM AP requests made (including retries)")
+        default=0,
+        description="Total number of LLM AP requests made (including retries)",
+    )
 
     total_input_tokens: int = Field(
-        default=0, description="Sum of input_token across all steps")
+        default=0, description="Sum of input_token across all steps"
+    )
     total_output_tokens: int = Field(
-        default=0, description="Sum of output_token across all steps")
+        default=0, description="Sum of output_token across all steps"
+    )
 
     total_time_seconds: float = Field(
-        default=0, description="Wall-clock time fro agent start to finish")
+        default=0, description="Wall-clock time fro agent start to finish"
+    )
     steps: list[StepMetrics] = Field(
-        default_factory=list, description="Per step metrics, one entry per agent iteration")
+        default_factory=list,
+        description="Per step metrics, one entry per agent iteration",
+    )
     system_prompt: str = Field(
-        description="Full system prompt sen to the LLM (for provenance checking)")
+        description="Full system prompt sen to the LLM (for provenance checking)"
+    )
     error: Optional[str] = Field(
-        default="", description="Error message i the agent failed (None if successful)")
-    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(
-    ), description="ISO 8601 timestamp of when the solution was produced")
+        default="",
+        description="Error message i the agent failed (None if successful)",
+    )
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now().isoformat(),
+        description="ISO 8601 timestamp of when the solution was produced",
+    )
 
 
 class Agent(SolutionOutput):
@@ -66,8 +78,9 @@ class Agent(SolutionOutput):
     executed: bool = False
     previous_sandbox_output: str = ""
 
-
-    def set_step_data(self, new: StepMetrics, resp: dict[str, str | int], start: datetime) -> None:
+    def set_step_data(
+        self, new: StepMetrics, resp: dict[str, str | int], start: datetime
+    ) -> None:
 
         new.llm_input = resp["llm_input"]
         new.llm_output = resp["llm_output"]
@@ -93,10 +106,7 @@ class Agent(SolutionOutput):
 
         out = ""
         if self.executed:
-            out += (
-                f"<{flag}>\n{self.exec_result}\n"
-                f"</{flag}>\n\n"
-            )
+            out += f"<{flag}>\n{self.exec_result}\n</{flag}>\n\n"
         out += self.get_instruction_prompt()
 
         return out
@@ -109,28 +119,9 @@ class Agent(SolutionOutput):
         new = StepMetrics(step=len(self.steps) + 1)
         self.steps.append(new)
 
-        DEBUG = False
-        #DEBUG = False
-        global NDEBUG
-        NDEBUG += 1
-        if DEBUG:  # TODO debug if
-            resp = {  # TODO
-                    "llm_input": "current",
-                    "llm_output": """```python
-print("helo")
-set_new_current_objective("Investigate the error and find a solution to resolve the problem", "in progress")
-print("bye")
-```""",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "api_url": "no url",
-                "model_name": "no model",
-                "retries": 0
-            }
-        else:
-            if MemoryPrompt.swe_mode:
-                Log.print(f"step is now: {MemoryPrompt.current_step}")
-            resp = self.llmapi.response(MemoryPrompt.messages)
+        if MemoryPrompt.swe_mode:
+            Log.print(f"step is now: {MemoryPrompt.current_step}")
+        resp = self.llmapi.response(MemoryPrompt.messages)
 
         MemoryPrompt.add_message(resp["llm_output"], "assistant")
         codes = MemoryPrompt.get_message_codes()
@@ -146,7 +137,7 @@ print("bye")
                 if not read.replace("''", "", 1).strip():
                     read = "'[Code executed, but no print occured]'"
                 elif len(read) > 5000:
-                    if not "test" in resp["llm_output"]:
+                    if "test" not in resp["llm_output"]:
                         err_msg = (
                             "\n<WARNING>\n"
                             "SANDBOX_OUTPUT truncated at 5000 characters.\n"
@@ -179,11 +170,11 @@ print("bye")
             if loop:
                 self.executed = False
             else:
-                MemoryPrompt.compress_user_msg(self.previous_sandbox_output, self.executed)
+                MemoryPrompt.compress_user_msg(
+                    self.previous_sandbox_output, self.executed
+                )
                 self.previous_sandbox_output = new.sandbox_output
-                
-            #if len(self.steps) >= 28:
-            #    MemoryPrompt.last_step = True
+
             if MemoryPrompt.current_step == "investigate":
                 if len(self.steps) <= 15:
                     if len(MemoryPrompt.step_memory) >= 10:
@@ -198,11 +189,15 @@ print("bye")
                         MemoryPrompt.simple_go_next_step()
 
             MemoryPrompt.apply_go_next_step(self.testbed)
-            prompt = self.create_prompt(f"{MemoryPrompt.previous_step.upper()}_OUTPUT")
+            prompt = self.create_prompt(
+                f"{MemoryPrompt.previous_step.upper()}_OUTPUT"
+            )
             MemoryPrompt.add_message(prompt)
         else:
             MemoryPrompt.save_try(new.sandbox_output)
-            MemoryPrompt.compress_user_msg(self.previous_sandbox_output, self.executed)
+            MemoryPrompt.compress_user_msg(
+                self.previous_sandbox_output, self.executed
+            )
             self.previous_sandbox_output = new.sandbox_output
             MemoryPrompt.compress_memory()
             prompt = self.create_prompt("LAST_ATTEMPT")
@@ -219,40 +214,30 @@ print("bye")
             self.error = msg
             return False
 
-        if DEBUG and NDEBUG == 10:  # TODO
-            return False
-        else:
-            return True
+        return True
 
     def create_output(self) -> None:
 
         time = datetime.now() - self.start
         total_time = time.total_seconds()
         output = SolutionOutput(
-
             task_id=self.task_id,
             benchmark=self.benchmark,
-
             success=self.success,
             solution=self.solution,
             iterations=self.iterations,
             total_requests=self.llmapi.requests,
-
             total_input_tokens=self.total_input_tokens,
             total_output_tokens=self.total_output_tokens,
-
             total_time_seconds=total_time,
             steps=self.steps,
             system_prompt=self.system_prompt,
-            timestamp=self.timestamp
+            timestamp=self.timestamp,
         )
 
         success, error = self.check_solution()
         output.error += error
-        output.success = (
-                output.success and
-                success
-        )
+        output.success = output.success and success
         if output.success:
             Log.print(f"[{output.benchmark.upper()}_SUCCESS_END]")
         else:

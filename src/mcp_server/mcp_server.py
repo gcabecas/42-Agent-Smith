@@ -151,7 +151,7 @@ server/discover :
                             f"unknown method {data['method']}; "
                             "possibles: tools/list | tools/call "
                             "| server/discover"
-                        )
+                        ),
                     },
                 }
             )

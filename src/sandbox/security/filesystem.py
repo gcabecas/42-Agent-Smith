@@ -11,8 +11,9 @@ def _is_authorized(path: str, allowed_directories: list[str]) -> bool:
     return False
 
 
-def restricted_open(allowed_directories: list[str],
-                    file: str, *args: Any, **kwargs: Any) -> Any:
+def restricted_open(
+    allowed_directories: list[str], file: str, *args: Any, **kwargs: Any
+) -> Any:
     if not _is_authorized(file, allowed_directories):
         raise PermissionError(f"access to '{file}' is not authorized")
     return open(file, *args, **kwargs)

@@ -6,20 +6,34 @@ class SandboxConfig(BaseModel):
     Uses allowlist approach: only imports in authorized_imports are allowed.
     Everything else is blocked by default.
     """
-    authorized_imports: list[str] = Field(default_factory=lambda: [
-        "math", "math.*",
-        "collections", "collections.*",
-        "itertools", "re", "json",
-        "typing", "typing.*",
-        "functools", "operator",
-        "heapq", "bisect", "copy",
-        "string", "random",
-        "datetime", "datetime.*",
-        "array", "cmath",
-    ])
-    allowed_directories: list[str] = Field(default_factory=lambda: [
-        "/testbed", "/tmp/agent"
-    ])
+
+    authorized_imports: list[str] = Field(
+        default_factory=lambda: [
+            "math",
+            "math.*",
+            "collections",
+            "collections.*",
+            "itertools",
+            "re",
+            "json",
+            "typing",
+            "typing.*",
+            "functools",
+            "operator",
+            "heapq",
+            "bisect",
+            "copy",
+            "string",
+            "random",
+            "datetime",
+            "datetime.*",
+            "array",
+            "cmath",
+        ]
+    )
+    allowed_directories: list[str] = Field(
+        default_factory=lambda: ["/testbed", "/tmp/agent"]
+    )
     max_execution_time_seconds: int = 30
     max_memory_mb: int = 512
 
@@ -30,6 +44,7 @@ class SWEBenchTaskInput(BaseModel):
     Your agent receives this and must produce a git patch that fixes
     the issue.
     """
+
     instance_id: str
     problem_statement: str
     docker_image: str

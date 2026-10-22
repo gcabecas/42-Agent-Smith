@@ -1,25 +1,20 @@
-
-from typing import Any
 from pydantic import BaseModel, ConfigDict
 from openai import OpenAI, BadRequestError
 import os
 import sys
 import json
 from dotenv import load_dotenv
-import random
-
-from src.agent.stepmetrics import StepMetrics
 
 
 def set_file_name(path: str, extension: str) -> str:
-    """ choose the file name dependig of existing files """
+    """Return the first available filename for the requested path."""
     from pathlib import Path
     from os.path import exists
 
     Path(Path(path).parent).mkdir(parents=True, exist_ok=True)
-    while 1:
+    while True:
         if exists(path):
-            s_case = path.removesuffix(extension).split('_')
+            s_case = path.removesuffix(extension).split("_")
             sn_case = s_case[-1]
             if sn_case.isdigit():
                 s = f"{'_'.join(s_case[:-1])}_{int(sn_case) + 1}" + extension
@@ -63,12 +58,13 @@ class LlmApiError(Exception):
 
 
 class LlmApi:
-
     def __str__(self) -> str:
         info = "\n".join([str(u) for u in self.urls])
         return f"{self.iurl}:iurl {self.imodel}:imodel\n{info}\n"
 
-    def __init__(self, providers_file: str, baseurl: str = "", basemodel: str = "") -> None:
+    def __init__(
+        self, providers_file: str, baseurl: str = "", basemodel: str = ""
+    ) -> None:
         self.iurl = -1
         self.imodel = -1
         self.requests = 0
@@ -79,12 +75,13 @@ class LlmApi:
                 ProvidersList(data=self.urls)
         except Exception as e:
             raise LlmApiError(
-                f"can't load providers in: {providers_file} error: {e}")
+                f"can't load providers in: {providers_file} error: {e}"
+            )
         for url in self.urls:
             url["client"] = OpenAI(
                 base_url=url["url"],
                 api_key=os.getenv(url["api_key"], "0"),
-                timeout=60.0
+                timeout=60.0,
             )
 
         if baseurl and not basemodel:
@@ -108,42 +105,54 @@ class LlmApi:
                         break
                 i += 1
             if i == len(self.urls):
-                self.urls.append({
-                    "name": baseurl, "models": [basemodel],
-                    "client": OpenAI(
-                        base_url=baseurl,
-                        api_key=os.getenv("EXTRA_API_KEY", "0"),
-                        timeout=60.0
-                    )
-                })
+                self.urls.append(
+                    {
+                        "name": baseurl,
+                        "models": [basemodel],
+                        "client": OpenAI(
+                            base_url=baseurl,
+                            api_key=os.getenv("EXTRA_API_KEY", "0"),
+                            timeout=60.0,
+                        ),
+                    }
+                )
         if self.iurl == -1:
             self.iurl = len(self.urls) - 1
             self.imodel = len(self.urls[self.iurl]["models"]) - 1
 
-
-    def response(self, messages: list[dict[str, str | int]], temperature: float = 0.1) -> dict[str, str | int]:
+    def response(
+        self, messages: list[dict[str, str | int]], temperature: float = 0.1
+    ) -> dict[str, str | int]:
 
         retries = 0
 
-        while 1:
+        while True:
             try:
                 params = {
                     "model": self.urls[self.iurl]["models"][self.imodel],
                     "messages": messages,
-                    "temperature": temperature
+                    "temperature": temperature,
                 }
                 self.requests += 1
                 try:
-                    Log.print(f"[sending llm '{self.get_current()}' demand ...]")
-                    response = self.urls[self.iurl]["client"].chat.completions.create(
-                        **params)
+                    Log.print(
+                        f"[sending llm '{self.get_current()}' demand ...]"
+                    )
+                    response = self.urls[self.iurl][
+                        "client"
+                    ].chat.completions.create(**params)
                     output = response.choices[0].message.content
-                    Log.print(f"[llm response recieved.]\n{output}\n[/llm response recieved.]")
+                    Log.print(
+                        f"[llm response recieved.]\n{output}\n[/llm response recieved.]"
+                    )
                 except BadRequestError:
-                    Log.print(f"'temperature' not handled by: {self.get_current()}")
+                    Log.print(
+                        f"'temperature' not handled by: {self.get_current()}"
+                    )
                     params.pop("temperature")
-                    response = self.urls[self.iurl]["client"].chat.completions.create(
-                        **params)
+                    response = self.urls[self.iurl][
+                        "client"
+                    ].chat.completions.create(**params)
                     self.requests += 1
 
                 if not isinstance(output, str) or output == "":
@@ -155,19 +164,14 @@ class LlmApi:
                     "output_tokens": response.usage.completion_tokens,
                     "api_url": self.urls[self.iurl]["url"],
                     "model_name": self.get_current(),
-                    "retries": retries
+                    "retries": retries,
                 }
             except Exception as e:
                 retries += 1
                 usr = self.urls[self.iurl]
-                msg = (
-                    f"{usr['name']}"
-                    f"|{usr['models'][self.imodel]}: {e}"
-                )
+                msg = f"{usr['name']}|{usr['models'][self.imodel]}: {e}"
                 Log.print("response error; ", msg)
                 self.next()
-                # time.sleep(0.1)
-        return dict()
 
     def next(self) -> None:
         if self.imodel == 0:
@@ -181,5 +185,3 @@ class LlmApi:
 
     def get_current(self) -> str:
         return self.urls[self.iurl]["models"][self.imodel]
-
-

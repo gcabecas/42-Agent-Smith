@@ -13,7 +13,6 @@ def placeholder(*args, **kwargs) -> None:
 
 
 class McpToolsCore(BaseModel):
-
     out_format: str
     in_format: str
     io_output: Any = sys.stdout
@@ -136,9 +135,9 @@ class McpToolsCore(BaseModel):
                 func["arguments"][s_elem], self.methods[name][s_elem]
             ):
                 log += (
-                        f"error; wrong type for {s_elem}; used: "
-                        f"{type(func['arguments'][s_elem])}, "
-                        f"needed: {self.methods[name][s_elem]}"
+                    f"error; wrong type for {s_elem}; used: "
+                    f"{type(func['arguments'][s_elem])}, "
+                    f"needed: {self.methods[name][s_elem]}"
                 )
         if log:
             log = "[key 'arguments' error. missing or wrong value]\n" + log
@@ -146,9 +145,6 @@ class McpToolsCore(BaseModel):
 
     def tools_list(self) -> Response:
         return Response(self.model)
-
-    def server_discover(self) -> Response:
-        return Response("")  # TODO
 
     def tools_call(
         self, func: dict[str, Any], data: dict[str, Any]
@@ -226,7 +222,7 @@ class RequestParamsBase(BaseModel):
                 '"params": { "_meta": {\n'
                 '   "io.modelcontextprotocol/protocolVersion": "2026-07-28",\n'
                 '   "io.modelcontextprotocol/clientCapabilities":'
-                ' {} # Mandatory Key; Argument ignored by the server\n'
+                " {} # Mandatory Key; Argument ignored by the server\n"
                 "}, ... }"
             )
         return self

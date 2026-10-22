@@ -1,5 +1,8 @@
 __pycache__/
 .*/
 /info/
+/eval-results/
+/logs/
+/scripts.zip
 src/agent/.env
 moulinette

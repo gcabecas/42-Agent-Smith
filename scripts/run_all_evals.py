@@ -122,10 +122,7 @@ def run_logged(
 
 
 def mbpp_dataset_path(moulinette_dir: Path) -> Path:
-    return (
-        moulinette_dir
-        / "moulinette/mbpp/data/sanitized_tasks.json"
-    )
+    return moulinette_dir / "moulinette/mbpp/data/sanitized_tasks.json"
 
 
 def load_mbpp_dataset(moulinette_dir: Path) -> list[dict[str, Any]]:
@@ -212,8 +209,7 @@ def moulinette_executable(moulinette_dir: Path) -> Path:
     if installed:
         return Path(installed)
     raise FileNotFoundError(
-        "moulinette_eval not found; run `uv sync` in "
-        f"{moulinette_dir}"
+        f"moulinette_eval not found; run `uv sync` in {moulinette_dir}"
     )
 
 
@@ -343,8 +339,7 @@ class EvaluationRunner:
     def full_pool(self, benchmark: str) -> list[str]:
         if benchmark == "mbpp":
             return [
-                str(task)
-                for task in discover_mbpp_tasks(self.moulinette_dir)
+                str(task) for task in discover_mbpp_tasks(self.moulinette_dir)
             ]
         return discover_swebench_tasks(self.moulinette_dir)
 
@@ -484,7 +479,7 @@ class EvaluationRunner:
             entrypoint = self.root / "agent_mbpp.py"
             providers = self.root / "config/mbpp_providers.json"
         else:
-            entrypoint = self.root / "agent_swe.py"
+            entrypoint = self.root / "agent_swebench.py"
             providers = self.root / "config/swe_providers.json"
 
         command = [
@@ -589,9 +584,7 @@ class EvaluationRunner:
             result.update(
                 {
                     "agent_exit_code": agent.returncode,
-                    "agent_wall_time_seconds": round(
-                        agent.elapsed_seconds, 3
-                    ),
+                    "agent_wall_time_seconds": round(agent.elapsed_seconds, 3),
                     "agent_timed_out": agent.timed_out,
                 }
             )
@@ -777,9 +770,11 @@ class EvaluationRunner:
                 self.save_summary(selected)
                 if self.args.fail_fast and not result.get("overall_passed"):
                     return 1
-        return 0 if all(
-            result.get("overall_passed") for result in self.results
-        ) else 1
+        return (
+            0
+            if all(result.get("overall_passed") for result in self.results)
+            else 1
+        )
 
 
 def default_output_dir() -> Path:

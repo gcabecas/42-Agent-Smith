@@ -14,9 +14,12 @@ def _signature(tool: Tool) -> str:
     return f"{tool.name}({', '.join(params)})"
 
 
-def build_manual(config: SandboxConfig, specs: list[Tool],
-                 resources: list[Resource] = [],
-                 prompts: list[Prompt] = []) -> str:
+def build_manual(
+    config: SandboxConfig,
+    specs: list[Tool],
+    resources: list[Resource] = [],
+    prompts: list[Prompt] = [],
+) -> str:
     lines = [
         "You are running Python code in a sandbox.",
         f"- Authorized imports: {', '.join(config.authorized_imports)}",

@@ -1,5 +1,3 @@
-# USING MCP VERSION 2026-07-28
-
 from typing import Any
 import os
 import subprocess
@@ -13,8 +11,6 @@ import json
 from importlib.resources import files as Files
 
 from src.mcp_server.mcp_tools_core import McpToolsCore
-
-# TOOLS ---------------------------------------//
 
 
 class SWETools(McpToolsCore):
@@ -147,13 +143,12 @@ class SWETools(McpToolsCore):
                         lines = f_read.split("\n")
                         for elem in patterns:
                             read += (
-                                    f"{true_file.absolute()}:"
-                                    f"{n_line + 1} {lines[n_line]}\n"
+                                f"{true_file.absolute()}:"
+                                f"{n_line + 1} {lines[n_line]}\n"
                             )
                             n_line += 1
 
                 except Exception:
-                    # read += f"error in file {true_file.absolute()} : {e}\n"
                     pass
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True)
@@ -167,7 +162,6 @@ class SWETools(McpToolsCore):
         f_read = ""
         lang_key = tslp.detect_language(file)
         if lang_key is None or file.startswith("."):
-            # read += f"'{file}' cannot detect language\n"
             return None
 
         with open(file, "r") as f_open:
@@ -182,17 +176,13 @@ class SWETools(McpToolsCore):
         language = tslp.get_language(lang_key)
         tree = parser.parse(f_read.encode("utf-8"))
 
-        # Query
         query_string = tslp.get_tags_query(lang_key)
         if query_string is None:
             return None
-        # Usable objet from query
         query = tree_sitter.Query(language, query_string)
         if query is None:
             return None
-        # cursor to use query on tree
         cursor = tree_sitter.QueryCursor(query)
-        # usage
         matches = cursor.matches(tree.root_node)
         return (f_read, list(matches))
 
@@ -223,8 +213,8 @@ class SWETools(McpToolsCore):
                             if name == func_name:
                                 n_ligne = node.start_point[0]
                                 read += (
-                                        f"{true_file.absolute()}:"
-                                        f"{n_ligne + 1} {lines[n_ligne]}\n"
+                                    f"{true_file.absolute()}:"
+                                    f"{n_ligne + 1} {lines[n_ligne]}\n"
                                 )
 
                 except Exception:
@@ -238,32 +228,12 @@ class SWETools(McpToolsCore):
 
     def find_references(self, tid, name, filepath: str = "", line: int = -1):
         self.operation_mutex.acquire()
-        """
-        all:
-            py:
-                precise
-            oth:
-                large
-        no file_path:
-            error line arg need a filepath
-        no file_path  no line
-            large
-        no line
-            py:
-                one ref:
-                    precise
-                multiple ref:
-                    multiple-precise
-            oth:
-                large
-        """
 
         read = ""
         try:
             if line >= 0 and not filepath:
                 raise ValueError("line argument need a filepath setted")
 
-            # 1 get according files data python/other
             if not filepath.endswith(".py"):
                 if filepath:
                     try:
@@ -306,7 +276,6 @@ class SWETools(McpToolsCore):
                     except Exception:
                         pass
 
-                # 2 retrieve data
                 i = 0
                 count = 0
                 for matches in all_matches:
@@ -328,8 +297,8 @@ class SWETools(McpToolsCore):
                                             content = f_open.readline()
                                             j += 1
                                     read += (
-                                            f"{used_files[i]}:"
-                                            f"{n_ligne + 1} {content}\n"
+                                        f"{used_files[i]}:"
+                                        f"{n_ligne + 1} {content}\n"
                                     )
                                 except Exception:
                                     pass
@@ -337,7 +306,6 @@ class SWETools(McpToolsCore):
                 if count == 0:
                     raise ValueError("no definition found")
             else:
-                # 2 retrieve data
                 try:
                     tmp = self.search_codes_data(filepath)
                     if tmp is None:
@@ -347,9 +315,6 @@ class SWETools(McpToolsCore):
                     _, matches = tmp
                 except Exception:
                     raise
-
-                # 2.5 find the position of the original
-                # (rows not in args, or not setted args)
 
                 pos = -1
                 refs = []
@@ -373,7 +338,6 @@ class SWETools(McpToolsCore):
                     else:
                         raise ValueError("name not found in file")
 
-                # 3 trieve data
                 project = jedi.Project(".")
                 script = jedi.Script(path=filepath, project=project)
                 for the_line, col in refs:
@@ -449,7 +413,7 @@ class SWETools(McpToolsCore):
                 cwd=workdir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True
+                text=True,
             )
             read = str(result.stdout)
         except Exception as e:

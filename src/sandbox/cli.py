@@ -12,8 +12,9 @@ from src.sandbox.mcp_client import McpClient
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="sandbox")
-    parser.add_argument("config", nargs="?", type=load_config,
-                        default=SandboxConfig())
+    parser.add_argument(
+        "config", nargs="?", type=load_config, default=SandboxConfig()
+    )
     parser.add_argument("--mcp-stdio")
     parser.add_argument("--mcp-server")
     parser.add_argument("--manual", action="store_true")
@@ -58,8 +59,7 @@ def read_entry_from_python() -> Generator[None, str, str | None]:
             return source
 
 
-def repl(config: SandboxConfig,
-         tools: dict[str, Callable[..., Any]]) -> None:
+def repl(config: SandboxConfig, tools: dict[str, Callable[..., Any]]) -> None:
     with Sandbox(config, tools) as sandbox:
         while True:
             code = read_entry()
@@ -85,8 +85,11 @@ def main() -> None:
     except Exception as e:
         sys.exit(f"sandbox: cannot connect to MCP server: {e}")
     if args.manual:
-        print(build_manual(args.config, client.specs,
-                           client.resources, client.prompts))
+        print(
+            build_manual(
+                args.config, client.specs, client.resources, client.prompts
+            )
+        )
     else:
         repl(args.config, client.tools)
 

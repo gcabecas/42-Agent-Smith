@@ -1,6 +1,6 @@
-
 from typing import Any
 from pydantic import BaseModel
+import random
 import re
 
 from src.swebench.testbed import DockerTestbed
@@ -12,16 +12,15 @@ class MemoryPromptError(Exception):
 
 
 class MemoryPromptSave(Exception):
-
     def __str__(self):
         return str(self.data)
-    
+
     def __init__(self, data):
         self.data = data
 
 
 class MemoryPrompt:
-
+    swe_mode: bool = False
     _new_data: dict[str, Any] = dict()
 
     @classmethod
@@ -48,7 +47,7 @@ class MemoryPrompt:
             "current_step": cls.current_step,
             "previous_step": cls.previous_step,
             "loop_retry": cls.loop_retry,
-            "last_step": cls.last_step
+            "last_step": cls.last_step,
         }
         cls._new_data = data
 
@@ -65,7 +64,12 @@ class MemoryPrompt:
         return out
 
     @classmethod
-    def init(cls, base_prompt_system: str, base_prompt_user: str, swe_mode: bool = False) -> None:
+    def init(
+        cls,
+        base_prompt_system: str,
+        base_prompt_user: str,
+        swe_mode: bool = False,
+    ) -> None:
         cls.swe_mode = False
         cls.go_next = False
 
@@ -81,10 +85,12 @@ class MemoryPrompt:
             cls.add_message("\n<KNOWN_INFO> no saved data </KNOWN_INFO>\n")
             cls.step_memory = []
             cls.next_step = {
-                            "investigate": "hypothesis", "hypothesis": "modifie",
-                            "modifie": "test", "test": "clean memory",
-                            "clean memory": "reset",
-                            "reset": "investigate",
+                "investigate": "hypothesis",
+                "hypothesis": "modifie",
+                "modifie": "test",
+                "test": "clean memory",
+                "clean memory": "reset",
+                "reset": "investigate",
             }
             cls.current_step = "investigate"
             cls.previous_step = "investigate"
@@ -93,7 +99,6 @@ class MemoryPrompt:
         else:
             cls.tries = []
 
-    # Spceial Method usable by the llm
     @classmethod
     def save_missing_info(cls, msg: str) -> None:
         if not cls.swe_mode:
@@ -123,13 +128,14 @@ class MemoryPrompt:
         if msg not in cls.tries:
             cls.tries.append(msg)
 
-    # Spceial Method usable by the llm
     @classmethod
     def go_next_step(cls) -> None:
         if not cls.swe_mode:
             raise MemoryPromptError("Memory mode not configured")
         if cls.current_step == "investigate":
-            raise ValueError("Impossible to use go_next_step in the current phase")
+            raise ValueError(
+                "Impossible to use go_next_step in the current phase"
+            )
 
         print(f"step set to {cls.next_step[cls.current_step]}")
         cls.go_next = True
@@ -170,44 +176,98 @@ class MemoryPrompt:
             return out
 
         anti_repetition_words = [
-            "new", "novel", "fresh", "original", "innovative", "inventive",
-            "unprecedented", "unseen", "untried", "unexplored", "uncharted",
-            "first-of-its-kind", "groundbreaking", "pioneering", "cutting-edge",
+            "new",
+            "novel",
+            "fresh",
+            "original",
+            "innovative",
+            "inventive",
+            "unprecedented",
+            "unseen",
+            "untried",
+            "unexplored",
+            "uncharted",
+            "first-of-its-kind",
+            "groundbreaking",
+            "pioneering",
+            "cutting-edge",
             "state-of-the-art",
-
-            "different", "distinct", "distinctive", "unique", "singular",
-            "one-of-a-kind", "unlike", "alternative", "divergent", "unconventional",
-            "unorthodox", "atypical", "non-obvious", "unexpected", "surprising",
+            "different",
+            "distinct",
+            "distinctive",
+            "unique",
+            "singular",
+            "one-of-a-kind",
+            "unlike",
+            "alternative",
+            "divergent",
+            "unconventional",
+            "unorthodox",
+            "atypical",
+            "non-obvious",
+            "unexpected",
+            "surprising",
             "unfamiliar",
-
-            "varied", "diverse", "versatile", "multifaceted", "assorted", "mixed",
-            "eclectic", "wide-ranging", "many-sided", "alternating", "rotating",
-
-            "changing", "evolving", "shifting", "progressive", "incremental",
-            "adaptive", "dynamic", "transformative", "pivotal", "decisive",
+            "varied",
+            "diverse",
+            "versatile",
+            "multifaceted",
+            "assorted",
+            "mixed",
+            "eclectic",
+            "wide-ranging",
+            "many-sided",
+            "alternating",
+            "rotating",
+            "changing",
+            "evolving",
+            "shifting",
+            "progressive",
+            "incremental",
+            "adaptive",
+            "dynamic",
+            "transformative",
+            "pivotal",
+            "decisive",
             "game-changing",
-
-            "creative", "imaginative", "resourceful", "ingenious", "clever", "smart",
-            "lateral", "out-of-the-box", "experimental", "exploratory",
-
-            "informative", "insightful", "revealing", "enlightening", "illuminating",
-            "meaningful", "substantive", "additive", "productive", "fruitful", "useful",
+            "creative",
+            "imaginative",
+            "resourceful",
+            "ingenious",
+            "clever",
+            "smart",
+            "lateral",
+            "out-of-the-box",
+            "experimental",
+            "exploratory",
+            "informative",
+            "insightful",
+            "revealing",
+            "enlightening",
+            "illuminating",
+            "meaningful",
+            "substantive",
+            "additive",
+            "productive",
+            "fruitful",
+            "useful",
         ]
         magic1 = random.choice(anti_repetition_words)
-        while 1:
-            magic2 = random.choice(anti_repetition_words) 
+        while True:
+            magic2 = random.choice(anti_repetition_words)
             if magic1 != magic2:
                 break
         out += f"\nBe {magic1} and {magic2} in your response."
         return out
 
-    # Spceial Method usable by the llm
     @classmethod
     def propose_hypothesis(cls, files: list[str], msg: str) -> None:
         try:
             cls.CheckHypArgs(files=files, msg=msg)
         except Exception:
-            raise ValueError("files argument need to be a list of strings, and msg a string")
+            raise ValueError(
+                "files argument need to be a list of strings, and msg a string"
+            )
         if cls.current_step not in ["investigate", "hypothesis"]:
             print("You need to be asked to use this function")
             return
@@ -218,9 +278,7 @@ class MemoryPrompt:
             for elem in cls.hypothesis:
                 if elem == hyp:
                     cls.loop_retry += 1
-                    print(
-                        cls.loop_reaction_msg("propose_hypothesis")
-                    )
+                    print(cls.loop_reaction_msg("propose_hypothesis"))
                     if cls.current_step == "investigate":
                         cls.simple_go_next_step()
                     cls.save_data()
@@ -238,14 +296,22 @@ class MemoryPrompt:
             return False
 
         for i, elem in enumerate(cls.step_memory):
-            for memory in cls.step_memory[i + 1:]:
+            for memory in cls.step_memory[i + 1 :]:
                 if elem == memory:
                     cls.messages.pop(-1)
-                    if not "<INSTRUCTIONS>" in cls.messages[-1]["content"]:
-                        raise ValueError("no instructions during check_step_loop")
-                    cls.messages[-1]["content"] = cls.messages[-1]["content"].split("<INSTRUCTIONS>")[0].strip()
+                    if "<INSTRUCTIONS>" not in cls.messages[-1]["content"]:
+                        raise ValueError(
+                            "no instructions during check_step_loop"
+                        )
+                    cls.messages[-1]["content"] = (
+                        cls.messages[-1]["content"]
+                        .split("<INSTRUCTIONS>")[0]
+                        .strip()
+                    )
                     if not cls.messages[-1]["content"].strip():
-                        raise ValueError("impossible cut during check_step_loop")
+                        raise ValueError(
+                            "impossible cut during check_step_loop"
+                        )
                     if cls.current_step != "hypothesis":
                         cls.simple_go_next_step()
                     Log.print("duplicate deleted")
@@ -264,12 +330,12 @@ class MemoryPrompt:
             cls.compress_memory()
             cls.current_step = cls.next_step[cls.current_step]
             testbed.reset_data()
-   
+
     @classmethod
     def new_base_user_prompt(cls) -> str:
-        
+
         msg = cls.base_user
-        
+
         if cls.swe_mode:
             if not cls.hints and not cls.hypothesis:
                 return msg
@@ -299,7 +365,9 @@ class MemoryPrompt:
         cls.messages[1]["content"] = msg
 
     @classmethod
-    def compress_user_msg(cls, previous_sandbox_output: str, executed: bool) -> None:
+    def compress_user_msg(
+        cls, previous_sandbox_output: str, executed: bool
+    ) -> None:
 
         if len(cls.messages) == 3:
             cls.messages[-2]["content"] = cls.new_base_user_prompt()
@@ -312,11 +380,7 @@ class MemoryPrompt:
                     flag = f"{cls.previous_step.upper()}_OUTPUT"
                 else:
                     flag = "OUTPUT"
-                msg = (
-                    f"<{flag}>"
-                    f"\n{info}\n"
-                    f"</{flag}>"
-                )
+                msg = f"<{flag}>\n{info}\n</{flag}>"
             else:
                 msg = "[The previous message did not execute any code.]"
 
@@ -341,8 +405,8 @@ class MemoryPrompt:
         message = cls.messages[-1]
         if message["role"] != "assistant":
             raise MemoryPromptError(
-                "last message not from assistant, can't extract code")
+                "last message not from assistant, can't extract code"
+            )
         data = message["content"]
-        out = re.findall(r"```python\s*\n(.*?)```",
-                         data, flags=re.DOTALL)
+        out = re.findall(r"```python\s*\n(.*?)```", data, flags=re.DOTALL)
         return out
