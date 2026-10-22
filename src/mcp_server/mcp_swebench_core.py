@@ -47,6 +47,8 @@ class SWETools(McpToolsCore):
                     if end_line >= i >= start_line:
                         read += f"{str(i)}: {line}"
                     line = file.readline()
+                if end_line != float("inf") and end_line > i:
+                    read += f"WARNING: file have {i} lines, arg end_line is {end_line}"
 
         except Exception as e:
             self.message_complete(f"error encounter: {e}", tid, error=True)
@@ -410,10 +412,11 @@ class SWETools(McpToolsCore):
             result = subprocess.run(
                 ["/bin/bash", os.environ.get("EVAL_SCRIPT", "/eval.sh")],
                 cwd=workdir,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
             )
-            read = result.stdout + result.stderr
+            read = result.stdout
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True)
             return
@@ -437,24 +440,25 @@ class SWETools(McpToolsCore):
             self.operation_mutex.release()
         self.message_complete(read, tid)
 
-    def run_command(self, tid: int, command: str, workdir: str = "") -> None:
+    def run_command(self, tid: int, command: str, workdir: str = ".") -> str:
         self.operation_mutex.acquire()
         read = ""
         try:
             result = subprocess.run(
                 shlex.split(command),
                 cwd=workdir,
-                capture_output=True,
-                text=True,
-                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
             )
             read = str(result.stdout)
         except Exception as e:
             self.message_complete(f"internal error : {e}", tid, error=True)
-            return
+            return read
         finally:
             self.operation_mutex.release()
         self.message_complete(read, tid)
+        return read
 
     def __init__(self, *args, **kwargs) -> None:
         methods = {

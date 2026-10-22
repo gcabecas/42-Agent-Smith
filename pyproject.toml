@@ -17,6 +17,10 @@ dependencies = [
     "tree-sitter-language-pack",
     "GitPython",
     "jedi",
+	"OpenAI",
+	"Fire",
+	"dotenv",
+	"pexpect"
 ]
 
 [project.scripts]

@@ -1,7 +1,7 @@
 import argparse
 import codeop
 import sys
-from typing import Any, Callable
+from typing import Any, Callable, Generator
 
 from src.common.models import SandboxConfig
 from src.sandbox.config import load_config
@@ -42,6 +42,22 @@ def read_entry() -> str | None:
             return source
 
 
+def read_entry_from_python() -> Generator[None, str, str | None]:
+    lines: list[str] = []
+
+    while True:
+        data = yield
+        try:
+            lines.append(str(data))
+        except EOFError:
+            print()
+            return None
+
+        source = "\n".join(lines)
+        if _is_complete(source):
+            return source
+
+
 def repl(config: SandboxConfig,
          tools: dict[str, Callable[..., Any]]) -> None:
     with Sandbox(config, tools) as sandbox:
@@ -56,6 +72,8 @@ def repl(config: SandboxConfig,
                 print(output, end="")
             if status != "ok":
                 print(f"[{status}] {value}")
+                if status == "final_answer":
+                    print(f"[{status}] .")
 
 
 def main() -> None:

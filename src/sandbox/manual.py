@@ -28,7 +28,7 @@ def build_manual(config: SandboxConfig, specs: list[Tool],
         "- Each execution shares the same namespace; stdout and stderr "
         "are returned to you.",
         "- Call final_answer(value) to submit your final result.",
-        "",
+        "<sandbox_tools>",
         "Available tools (call them as Python functions):",
     ]
     for tool in specs:
@@ -37,6 +37,8 @@ def build_manual(config: SandboxConfig, specs: list[Tool],
         lines += ["", "Available resources (read_resource(uri) -> str):"]
         for resource in resources:
             lines.append(f"- {resource.uri} -> {resource.description}")
+
+    lines.append("</sandbox_tools>")
     if prompts:
         lines += ["", "Available prompts (get_prompt(name, **args) -> str):"]
         for prompt in prompts:

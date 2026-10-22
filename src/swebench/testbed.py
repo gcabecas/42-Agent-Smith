@@ -149,6 +149,23 @@ class DockerTestbed:
             self.python, "mcp_tools_swebench.py",
         ])
 
+    def reset_data(self, ref: str = "HEAD") -> None:
+        """ Return the deposit to `ref` state, without recreating the container. """
+        if self.container is None:
+            raise RuntimeError("Docker testbed is not started")
+
+        for command in (
+            ["git", "reset", "--hard", ref],
+            ["git", "clean", "-fd"],
+        ):
+            code, output = self.exec(command)
+            if code != 0:
+                raise RuntimeError(f"{' '.join(command)} failed: {output}")
+
+        code, output = self.exec(["git", "status", "--porcelain"])
+        if code != 0 or output.strip():
+            raise RuntimeError(f"testbed not clean after reset: {output}")
+
     def _terminate(self, number: int, frame: FrameType | None) -> None:
         self.close()
         signal.raise_signal(signal.SIGTERM)
